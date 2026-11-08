@@ -1,0 +1,42 @@
+{
+  "name": "suntab",
+  "private": true,
+  "version": "0.2.2",
+  "type": "module",
+  "description": "SunTab - 本地优先的个人新标签页",
+  "packageManager": "pnpm@11.23.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "zip": "wxt zip",
+    "compile": "vue-tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "postinstall": "wxt prepare"
+  },
+  "dependencies": {
+    "@tabler/icons-vue": "^3.50.0",
+    "dexie": "^4.4.7",
+    "pinia": "^4.1.0",
+    "pinyin-pro": "^3.29.5",
+    "vue": "^3.5.45"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.0",
+    "@tailwindcss/vite": "^4.3.5",
+    "@types/node": "^24.0.0",
+    "@wxt-dev/module-vue": "^1.0.3",
+    "tailwindcss": "^4.3.5",
+    "typescript": "^5.9.3",
+    "vite": "^8.1.5",
+    "vitest": "^5.1.0",
+    "vue-tsc": "^3.2.5",
+    "web-ext": "^10.5.0",
+    "wxt": "^0.21.5",
+    "lunar-typescript": "^1.8.7"
+  }
+}

@@ -1,0 +1,5 @@
+body {
+  width: 360px;
+  min-height: 260px;
+  background: var(--bg-body);
+}

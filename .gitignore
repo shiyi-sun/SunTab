@@ -1,0 +1,23 @@
+node_modules/
+.wxt/
+.output/
+dist/
+test-results/
+playwright-report/
+*.log
+.DS_Store
+Thumbs.db
+
+keys/
+
+# Local research, icon catalogs and build artifacts
+_research/
+docs/
+itab-icons/
+svglogo-icons/
+vibe_images/
+release/
+itab-icons-portable.zip
+itab-icons-portable.sha256.txt
+svglogo-icons-portable.zip
+svglogo-icons-portable.sha256.txt
