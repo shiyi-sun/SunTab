@@ -68,7 +68,9 @@ Most new tab pages want to be a portal. SunTab tries to be a desk: one calm back
 
 ## Install
 
-### Install a release
+SunTab runs in Chrome, Chromium, and Microsoft Edge. Releases contain a Chrome/Chromium package and an Edge package built from the same extension.
+
+### Chrome / Chromium
 
 1. Download `SunTab-0.2.2-chrome.zip` from the [GitHub Releases](https://github.com/shiyi-sun/SunTab/releases) or [AtomGit Releases](https://atomgit.com/shiyi-sun/SunTab/releases) page.
 2. Unzip it into a permanent folder, for example `D:\SunTab\0.2.2`.
@@ -76,7 +78,15 @@ Most new tab pages want to be a portal. SunTab tries to be a desk: one calm back
 4. Click **Load unpacked** and select the extracted `SunTab` folder.
 5. Open a new tab.
 
-Do not move or delete the folder after loading the extension.
+### Microsoft Edge
+
+1. Download `SunTab-0.2.2-edge.zip` from Releases.
+2. Unzip it into a permanent folder, for example `D:\SunTab\0.2.2-edge`.
+3. Open `edge://extensions` and turn on **Developer mode**.
+4. Click **Load unpacked** and select the extracted `SunTab` folder.
+5. Open a new tab.
+
+Do not move or delete the folder after loading the extension. Edge keeps its own extension data; use a JSON backup to move settings and icons from another browser.
 
 ### Build from source
 
@@ -95,7 +105,7 @@ Then load `.output/chrome-mv3` as an unpacked extension. For development, `pnpm 
 | --- | --- |
 | `storage` | Save settings and navigation in `chrome.storage.local` |
 | `unlimitedStorage` | Store uploaded icons and wallpapers in IndexedDB |
-| `favicon` | Read site icons from Chromium's local favicon cache |
+| `favicon` | Read site icons from the browser's local favicon cache |
 | `activeTab` | Read the current page title and URL when you open quick add |
 | `https://*.bing.com/*` (optional) | Download the daily wallpaper only after you enable Bing daily |
 
@@ -105,14 +115,14 @@ The optional Bing permission is requested once and remains valid until you revok
 
 SunTab is local-first. Settings and navigation live in `chrome.storage.local`, uploaded images live in IndexedDB, and a small first-paint snapshot lives in `localStorage`. SunTab has no analytics, no accounts, and no background network requests.
 
-The only time SunTab contacts the network is when you enable Bing daily wallpaper. Searches and icon links navigate only to the sites you choose. Automatic icons are read from Chromium's local favicon cache and are never fetched from the web.
+The only time SunTab contacts the network is when you enable Bing daily wallpaper. Searches and icon links navigate only to the sites you choose. Automatic icons are read from the browser's local favicon cache and are never fetched from the web.
 
 ## Good to know
 
-- Chromium / Manifest V3 only. Firefox is not supported.
+- Chrome, Chromium, and Microsoft Edge on Manifest V3. Firefox is not supported.
 - The interface is currently in Simplified Chinese.
 - JSON backups include uploaded icon images but not wallpaper images. Wallpapers are device-local.
-- Automatic icons depend on Chromium's favicon cache. Sites you have not visited may show a globe, and cached 16–32 px icons can look soft on large tiles.
+- Automatic icons depend on the browser's favicon cache. Sites you have not visited may show a globe, and cached 16–32 px icons can look soft on large tiles.
 - Uploaded and Bing wallpapers use light text. Very bright images may need a higher dim value for comfortable contrast.
 - The last selected group is not remembered across reloads; SunTab returns to the first group.
 - Web search suggestions, search history, bookmarks/history import, cloud sync, and a component store are intentionally out of scope.
@@ -128,7 +138,11 @@ pnpm build       # production build
 pnpm test:e2e    # Playwright; run pnpm build first
 ```
 
-Playwright loads `.output/chrome-mv3`. If the bundled Chromium is not available, set `SUNTAB_CHROME=/path/to/chrome`.
+Playwright loads `.output/chrome-mv3`. If the bundled Chromium is not available, set `SUNTAB_CHROME=/path/to/chrome`. To run the same suite in Edge:
+
+```bash
+SUNTAB_CHROME="C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe" pnpm test:e2e
+```
 
 ## Contact
 

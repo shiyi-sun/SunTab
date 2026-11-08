@@ -7,6 +7,8 @@ const EXTENSION_PATH = path.resolve('.output/chrome-mv3');
 const CHROME_PATH =
   process.env.SUNTAB_CHROME ??
   'C:/ruanjian/liulanqi/ungoogled-chromium_156.0.8078.79-1.1_windows_x64/chrome.exe';
+const IS_EDGE = /msedge(\.exe)?$/i.test(CHROME_PATH);
+const EDGE_EXTENSION_ID = 'baicegclhemapbjejjkgffjelfbehifl';
 
 type Fixtures = {
   context: BrowserContext;
@@ -43,6 +45,10 @@ export const test = base.extend<Fixtures>({
   },
 
   extensionId: async ({ context }, use) => {
+    if (IS_EDGE) {
+      await use(EDGE_EXTENSION_ID);
+      return;
+    }
     const page = await context.newPage();
     await page.goto('chrome://extensions');
     await page.waitForFunction(() => {

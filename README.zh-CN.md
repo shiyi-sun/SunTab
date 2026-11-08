@@ -68,7 +68,9 @@
 
 ## 安装
 
-### 安装发行版
+SunTab 支持 Chrome、Chromium 和 Microsoft Edge。发行版同时提供 Chrome / Chromium 包和 Edge 包，两者是同一份扩展构建。
+
+### Chrome / Chromium
 
 1. 从 [GitHub Releases](https://github.com/shiyi-sun/SunTab/releases) 或 [AtomGit 发行版](https://atomgit.com/shiyi-sun/SunTab/releases) 下载 `SunTab-0.2.2-chrome.zip`。
 2. 解压到一个固定目录，例如 `D:\SunTab\0.2.2`。
@@ -76,7 +78,15 @@
 4. 点击“加载已解压的扩展程序”，选择解压出来的 `SunTab` 文件夹。
 5. 打开一个新标签页。
 
-加载后不要移动或删除该目录。
+### Microsoft Edge
+
+1. 从发行版下载 `SunTab-0.2.2-edge.zip`。
+2. 解压到一个固定目录，例如 `D:\SunTab\0.2.2-edge`。
+3. 打开 `edge://extensions`，开启“开发人员模式”。
+4. 点击“加载解压缩的扩展”，选择解压出来的 `SunTab` 文件夹。
+5. 打开一个新标签页。
+
+加载后不要移动或删除该目录。Edge 使用自己独立的扩展数据；需要迁移时，在原来的浏览器导出 JSON，再到 Edge 的“设置 → 数据”导入。
 
 ### 从源码构建
 
@@ -95,7 +105,7 @@ pnpm build
 | --- | --- |
 | `storage` | 在 `chrome.storage.local` 保存设置与导航 |
 | `unlimitedStorage` | 在 IndexedDB 保存上传的图标和壁纸 |
-| `favicon` | 读取 Chromium 本地图标缓存 |
+| `favicon` | 读取浏览器本地图标缓存 |
 | `activeTab` | 打开快速添加时读取当前页标题与网址 |
 | `https://*.bing.com/*`（可选） | 仅在你开启必应每日后下载当天壁纸 |
 
@@ -105,14 +115,14 @@ pnpm build
 
 SunTab 是本地优先的。设置和导航保存在 `chrome.storage.local`，上传图片保存在 IndexedDB，首屏快照保存在 `localStorage`。没有统计、没有账号，也没有后台网络请求。
 
-唯一会联网的情况是你主动开启必应每日壁纸。搜索和图标链接只会导航到你选择的网站；自动图标只读取 Chromium 本地图标缓存，不联网抓取。
+唯一会联网的情况是你主动开启必应每日壁纸。搜索和图标链接只会导航到你选择的网站；自动图标只读取浏览器本地图标缓存，不联网抓取。
 
 ## 使用说明
 
-- 仅支持 Chromium / Manifest V3，不支持 Firefox。
+- 支持 Chrome、Chromium、Microsoft Edge（Manifest V3），不支持 Firefox。
 - 界面目前为简体中文。
 - JSON 备份包含上传的图标图片，但不包含壁纸图片；壁纸只留在当前设备。
-- 自动图标依赖 Chromium 的图标缓存。没访问过的站点可能只显示地球图标；缓存原图常常只有 16–32px，放在大卡片里可能发虚。
+- 自动图标依赖浏览器的图标缓存。没访问过的站点可能只显示地球图标；缓存原图常常只有 16–32px，放在大卡片里可能发虚。
 - 上传壁纸和必应壁纸使用浅色文字；遇到很亮的图片，可以调高遮罩让文字更清楚。
 - 浏览器重新加载后默认回到第一个分组，最后选中的分组不会单独记住。
 - 不提供网页搜索建议、搜索历史、书签 / 历史导入、云同步和组件商城。
@@ -128,7 +138,11 @@ pnpm build       # 生产构建
 pnpm test:e2e    # Playwright；先运行 pnpm build
 ```
 
-Playwright 默认加载 `.output/chrome-mv3`。如果本机没有可用的 Chromium，可以设置 `SUNTAB_CHROME=/path/to/chrome`。
+Playwright 默认加载 `.output/chrome-mv3`。如果本机没有可用的 Chromium，可以设置 `SUNTAB_CHROME=/path/to/chrome`。用 Edge 跑同一套测试：
+
+```bash
+SUNTAB_CHROME="C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe" pnpm test:e2e
+```
 
 ## 联系
 
