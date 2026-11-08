@@ -1,7 +1,7 @@
 import type { AppConfig, NavGroup, SearchEngine } from './types';
 
 export const APP_NAME = 'SunTab';
-export const APP_VERSION = '0.2.4';
+export const APP_VERSION = '0.2.9';
 export const SCHEMA_VERSION = 1 as const;
 
 export const STORAGE_KEYS = {
@@ -148,13 +148,13 @@ export const DEFAULT_CONFIG: AppConfig = {
     openInNewTab: true,
   },
   icon: {
-    size: 60,
+    size: 50,
     gap: 28,
     radius: 18,
     showLabel: true,
     labelSize: 12,
     labelColor: '#ffffff',
-    maxWidth: 1400,
+    maxWidth: 800,
   },
   sidebar: {
     side: 'left',

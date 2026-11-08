@@ -152,12 +152,12 @@ const stageStyle = computed<CSSProperties>(() => {
     } as CSSProperties;
   }
   const padding = config.value.sidebar.autoHide
-    ? '24px'
-    : `${config.value.sidebar.width + 24}px`;
+    ? '40px'
+    : `${config.value.sidebar.width + 40}px`;
   return (
     config.value.sidebar.side === 'left'
-      ? { '--stage-pad-left': padding, '--stage-pad-right': '24px' }
-      : { '--stage-pad-left': '24px', '--stage-pad-right': padding }
+      ? { '--stage-pad-left': padding, '--stage-pad-right': '40px' }
+      : { '--stage-pad-left': '40px', '--stage-pad-right': padding }
   ) as CSSProperties;
 });
 
@@ -917,9 +917,9 @@ function openGroupMenu(group: NavGroup, event: MouseEvent) {
   flex-direction: column;
   align-items: center;
   padding-top: clamp(16px, 3vh, 32px);
-  padding-right: var(--stage-pad-right, 24px);
+  padding-right: var(--stage-pad-right, 40px);
   padding-bottom: 12px;
-  padding-left: var(--stage-pad-left, 24px);
+  padding-left: var(--stage-pad-left, 40px);
   transition: padding 240ms var(--ease);
 }
 
@@ -937,7 +937,7 @@ function openGroupMenu(group: NavGroup, event: MouseEvent) {
 
 @media (min-width: 1025px) {
   .shell.is-drawer-open .stage {
-    padding-right: calc(var(--drawer-width) + 24px);
+    padding-right: calc(var(--drawer-width) + 40px);
   }
 }
 

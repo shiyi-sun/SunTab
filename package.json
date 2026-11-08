@@ -1,7 +1,7 @@
 {
   "name": "suntab",
   "private": true,
-  "version": "0.2.4",
+  "version": "0.2.9",
   "type": "module",
   "description": "SunTab - 本地优先的个人新标签页",
   "packageManager": "pnpm@11.23.0",

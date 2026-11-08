@@ -2,13 +2,16 @@
 import { ref } from 'vue';
 import {
   collectBackupIcons,
+  collectOrphanIconIds,
   createBackup,
   downloadJson,
+  filterBackupIconsForNav,
   parseBackup,
   restoreBackupIcons,
   type BackupStats,
 } from '../../../shared/backup';
 import { createDefaultConfig } from '../../../shared/defaults';
+import { deleteIconBlob, listIconBlobs } from '../../../shared/iconBlobs';
 import type { BackupIconFile, SunTabBackup } from '../../../shared/types';
 import { useConfigStore } from '../../../stores/config';
 import { useNavStore } from '../../../stores/nav';
@@ -75,14 +78,28 @@ async function confirmImport() {
     `suntab-before-import-${stamp()}.json`,
     createBackup(configStore.config, navStore.groups, currentIcons),
   );
-  const restored = await restoreBackupIcons(data.icons ?? []);
+  const importedIcons = filterBackupIconsForNav(data.icons ?? [], data.nav);
+  const restored = await restoreBackupIcons(importedIcons);
   configStore.replaceConfig(data.config);
   navStore.replaceGroups(data.nav);
+
+  let cleaned = 0;
+  try {
+    const records = await listIconBlobs();
+    const orphanIds = collectOrphanIconIds(records, navStore.groups);
+    for (const id of orphanIds) {
+      await deleteIconBlob(id);
+      cleaned += 1;
+    }
+  } catch {
+    // The import already succeeded; orphan cleanup is best-effort.
+  }
+
   preview.value = null;
-  status.value = {
-    tone: 'ok',
-    text: data.icons?.length ? `导入成功，已恢复 ${restored} 个上传图标` : '导入成功',
-  };
+  const parts = ['导入成功'];
+  if (restored) parts.push(`已恢复 ${restored} 个上传图标`);
+  if (cleaned) parts.push(`清理 ${cleaned} 个旧图标`);
+  status.value = { tone: 'ok', text: parts.join('，') };
 }
 
 function cancelImport() {
@@ -123,7 +140,7 @@ function resetSettings() {
         {{ preview.stats.folders }} 个文件夹
       </p>
       <p v-if="preview.data.icons?.length" class="muted">
-        含 {{ preview.data.icons.length }} 个上传图标，导入后写回浏览器数据库。
+        含 {{ preview.data.icons.length }} 个上传图标；导入时只写回新导航引用的图标。
       </p>
       <p class="muted">
         壁纸原图不包含在 JSON 中；旧备份不含上传图标时，缺失的图标会回退为地球图标。

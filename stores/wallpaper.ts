@@ -97,6 +97,7 @@ export const useWallpaperStore = defineStore('wallpaper', () => {
   const error = ref('');
   const busy = ref(false);
   const initialized = ref(false);
+  const uploads = ref<WallpaperRecord[]>([]);
 
   const backgroundStyle = computed<CSSProperties>(() => {
     const wallpaper = configStore.config.wallpaper;
@@ -242,6 +243,11 @@ export const useWallpaperStore = defineStore('wallpaper', () => {
     persistBootstrap();
   }
 
+  async function refreshUploads() {
+    const records = await (await wallpaperTable()).where('kind').equals('upload').toArray();
+    uploads.value = records.sort((left, right) => right.createdAt - left.createdAt);
+  }
+
   async function fetchAndApplyBing(silent = false) {
     if (!silent) error.value = '';
     try {
@@ -369,12 +375,63 @@ export const useWallpaperStore = defineStore('wallpaper', () => {
         value: id,
       };
       await loadCurrent();
+      await refreshUploads().catch(() => undefined);
       return true;
     } catch (reason) {
       error.value = messageOf(reason);
       return false;
     } finally {
       busy.value = false;
+    }
+  }
+
+  async function applyUpload(id: string): Promise<boolean> {
+    error.value = '';
+    try {
+      const record = await (await wallpaperTable()).get(id);
+      if (!record || record.kind !== 'upload') {
+        error.value = '壁纸记录不存在';
+        await refreshUploads();
+        return false;
+      }
+      configStore.config.wallpaper = {
+        ...configStore.config.wallpaper,
+        kind: 'upload',
+        value: id,
+      };
+      await loadCurrent();
+      return true;
+    } catch (reason) {
+      error.value = messageOf(reason);
+      return false;
+    }
+  }
+
+  async function deleteUpload(id: string): Promise<boolean> {
+    error.value = '';
+    try {
+      const table = await wallpaperTable();
+      const record = await table.get(id);
+      if (!record || record.kind !== 'upload') {
+        await refreshUploads();
+        return false;
+      }
+      const isCurrent =
+        configStore.config.wallpaper.kind === 'upload' &&
+        configStore.config.wallpaper.value === id;
+      await table.delete(id);
+      await refreshUploads();
+      if (isCurrent) {
+        const next = uploads.value[0];
+        configStore.config.wallpaper = next
+          ? { ...configStore.config.wallpaper, kind: 'upload', value: next.id }
+          : { ...configStore.config.wallpaper, kind: 'gradient', value: DEFAULT_WALLPAPER };
+        await loadCurrent();
+      }
+      return true;
+    } catch (reason) {
+      error.value = messageOf(reason);
+      return false;
     }
   }
 
@@ -416,12 +473,16 @@ export const useWallpaperStore = defineStore('wallpaper', () => {
     copyright,
     error,
     busy,
+    uploads,
     init,
+    refreshUploads,
     setGradient,
     setColor,
     setBlur,
     setDim,
     uploadFile,
+    applyUpload,
+    deleteUpload,
     enableBing,
   };
 });

@@ -7,6 +7,7 @@ import {
   IconX,
 } from '@tabler/icons-vue';
 import IconThumb from '../../components/grid/IconThumb.vue';
+import { getIconColor, getIconInitial } from '../../shared/color';
 import { APP_NAME, APP_VERSION } from '../../shared/defaults';
 import { saveIconBlob } from '../../shared/iconBlobs';
 import { normalizeHttpUrl } from '../../shared/nav';
@@ -76,6 +77,7 @@ const name = ref('');
 const error = ref('');
 const savedName = ref('');
 const savedGroupName = ref('');
+const savedIconFallback = ref(false);
 const nameInput = ref<HTMLInputElement | null>(null);
 let closeTimer: number | undefined;
 
@@ -162,13 +164,21 @@ async function addToSunTab() {
         };
       }
     } catch {
-      // Keep the browser favicon cache as the fallback.
+      // Fall through to the text initial below.
+    }
+    if (item.icon.kind !== 'upload') {
+      item.icon = {
+        kind: 'text',
+        value: getIconInitial(item.name),
+        bg: getIconColor(item.name),
+      };
     }
     group.items.push(item);
     await writeNav(latest);
     groups.value = latest;
     savedName.value = item.name;
     savedGroupName.value = group.name;
+    savedIconFallback.value = item.icon.kind !== 'upload';
     if (closeTimer) window.clearTimeout(closeTimer);
     closeTimer = window.setTimeout(() => window.close(), 1000);
   } catch {
@@ -215,6 +225,9 @@ onBeforeUnmount(() => {
       <h1>已添加</h1>
       <p>
         「{{ savedName }}」已保存到「{{ savedGroupName }}」。
+      </p>
+      <p v-if="savedIconFallback" class="saved-fallback">
+        没抓到网站图标，已用文字首字代替。
       </p>
       <p class="auto-close">窗口即将自动关闭…</p>
     </section>
@@ -423,6 +436,13 @@ onBeforeUnmount(() => {
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.6;
+}
+
+.saved .saved-fallback {
+  max-width: 240px;
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: 11px;
 }
 
 .saved .auto-close {

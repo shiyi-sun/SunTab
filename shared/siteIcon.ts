@@ -1,3 +1,4 @@
+import { prepareBrandSvg } from './brandSvg';
 import { DARK_ICON_BG } from './color';
 import { analyzeIconVisibility, ensureImageDecodes } from './image';
 
@@ -188,6 +189,38 @@ function manifestUrlFromDocument(doc: Document, pageUrl: string): string | null 
   return resolveHttpUrl(href, documentBase(doc, pageUrl));
 }
 
+function brandSvgCandidatesFromDocument(
+  doc: Document,
+  pageUrl: string,
+): string[] {
+  const base = documentBase(doc, pageUrl);
+  const urls: string[] = [];
+  for (const image of Array.from(doc.querySelectorAll('img[src], img[data-src]'))) {
+    const raw = image.getAttribute('src') || image.getAttribute('data-src') || '';
+    if (!/\.svg(?:[?#]|$)/i.test(raw)) continue;
+    const context = image.closest(
+      'header, nav, a, [class*="logo" i], [class*="brand" i]',
+    );
+    const marker = [
+      raw,
+      image.getAttribute('class'),
+      image.getAttribute('id'),
+      image.getAttribute('alt'),
+      context?.getAttribute('class'),
+      context?.getAttribute('id'),
+    ]
+      .filter(Boolean)
+      .join(' ');
+    const looksLikeBrand = /logo|brand|标志|商标/i.test(marker);
+    if (!looksLikeBrand) continue;
+    const resolved = resolveHttpUrl(raw, base);
+    if (!resolved) continue;
+    urls.push(resolved);
+    if (urls.length >= 4) break;
+  }
+  return [...new Set(urls)];
+}
+
 export function extractSvgIconCandidates(html: string, pageUrl: string): string[] {
   const doc = parseDocument(html);
   if (!doc) return [];
@@ -307,9 +340,20 @@ type LoadedCandidate =
 async function loadCandidate(
   url: string,
   deadline: number,
+  source: 'icon' | 'brand' = 'icon',
 ): Promise<LoadedCandidate | null> {
-  const blob = await fetchSvg(url, deadline);
+  let blob = await fetchSvg(url, deadline);
   if (!blob) return null;
+  if (source === 'brand') {
+    const prepared = prepareBrandSvg(await blob.text());
+    if (!prepared) return null;
+    blob = new Blob([prepared], { type: SVG_MIME });
+    try {
+      await ensureImageDecodes(blob);
+    } catch {
+      return null;
+    }
+  }
   const visibility = await analyzeIconVisibility(blob);
   if (visibility.blank || visibility.whiteSheet) return null;
   return { kind: visibility.whiteOnly ? 'white' : 'normal', blob };
@@ -338,11 +382,14 @@ export async function fetchSiteSvgIcon(
   let remaining = MAX_SVG_ATTEMPTS;
   let whiteFallback: SiteSvgIcon | null = null;
 
-  const tryUrls = async (urls: string[]): Promise<SiteSvgIcon | null> => {
+  const tryUrls = async (
+    urls: string[],
+    source: 'icon' | 'brand' = 'icon',
+  ): Promise<SiteSvgIcon | null> => {
     for (const url of urls) {
       if (remaining <= 0) return null;
       remaining -= 1;
-      const candidate = await loadCandidate(url, deadline);
+      const candidate = await loadCandidate(url, deadline, source);
       if (!candidate) continue;
       if (candidate.kind === 'white') {
         whiteFallback ??= {
@@ -369,6 +416,12 @@ export async function fetchSiteSvgIcon(
       if (fromManifest) return fromManifest;
     }
   }
+
+  const fromBrand = await tryUrls(
+    brandSvgCandidatesFromDocument(doc, target.href),
+    'brand',
+  );
+  if (fromBrand) return fromBrand;
 
   const fromMask = await tryUrls(groups.mask);
   if (fromMask) return fromMask;

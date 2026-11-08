@@ -3,7 +3,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import path from 'node:path';
 import type { Page } from '@playwright/test';
-import { PAPER_WALLPAPER } from '../shared/defaults';
+import { DEFAULT_WALLPAPER, PAPER_WALLPAPER } from '../shared/defaults';
 import { expect, test } from './fixtures';
 
 async function readNav(page: Page): Promise<
@@ -76,6 +76,25 @@ async function addIcon(page: Page, name: string, url: string) {
   await dialog.locator('.dialog-footer .panel-btn.primary').click();
   await expect(dialog).toBeHidden();
   await expect(page.locator(`.icon-tile[title="${name}"]`)).toBeVisible();
+}
+
+async function tableCount(page: Page, storeName: 'icons' | 'wallpapers'): Promise<number> {
+  return page.evaluate((store) => {
+    return new Promise<number>((resolve) => {
+      const request = indexedDB.open('suntab');
+      request.onsuccess = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains(store)) {
+          resolve(0);
+          return;
+        }
+        const count = db.transaction(store, 'readonly').objectStore(store).count();
+        count.onsuccess = () => resolve(count.result);
+        count.onerror = () => resolve(-1);
+      };
+      request.onerror = () => resolve(-1);
+    });
+  }, storeName);
 }
 
 let server: http.Server;
@@ -218,6 +237,71 @@ test('uses night as the default wallpaper', async ({ newtab }) => {
   expect(background).not.toContain('data:image/svg');
 });
 
+test('wallpaper uploads can be reselected and deleted', async ({ newtab }) => {
+  const wallpaperCount = () => tableCount(newtab, 'wallpapers');
+
+  await newtab.locator('.wallpaper-button').click();
+  const panel = newtab.locator('.wp-panel');
+  await expect(panel).toBeVisible();
+  await panel.getByRole('tab', { name: '上传' }).click();
+  const input = panel.locator('input[type="file"]');
+
+  await input.setInputFiles(path.resolve('public/icon/128.png'));
+  await expect(panel.locator('.upload-card')).toHaveCount(1);
+  await input.setInputFiles(path.resolve('public/icon/48.png'));
+  await expect(panel.locator('.upload-card')).toHaveCount(2);
+  await expect.poll(wallpaperCount).toBe(2);
+
+  const card128 = panel.locator('.upload-card').filter({ hasText: '128.png' });
+  const card48 = panel.locator('.upload-card').filter({ hasText: '48.png' });
+  await card128.locator('.upload-apply').click();
+  await expect(card128).toHaveClass(/active/);
+
+  await card48.hover();
+  await card48.locator('.upload-delete').click();
+  await expect(card48.locator('.upload-confirm')).toBeVisible();
+  await card48.getByRole('button', { name: '删除', exact: true }).click();
+  await expect(panel.locator('.upload-card')).toHaveCount(1);
+  await expect.poll(wallpaperCount).toBe(1);
+
+  await card128.hover();
+  await card128.locator('.upload-delete').click();
+  await card128.getByRole('button', { name: '删除', exact: true }).click();
+  await expect(panel.locator('.upload-card')).toHaveCount(0);
+  await expect.poll(wallpaperCount).toBe(0);
+
+  await expect
+    .poll(() =>
+      newtab.evaluate(() => {
+        return new Promise<{ kind: string; value: string }>((resolve) => {
+          (
+            globalThis as unknown as {
+              chrome: {
+                storage: {
+                  local: {
+                    get(
+                      key: string,
+                      callback: (value: Record<string, unknown>) => void,
+                    ): void;
+                  };
+                };
+              };
+            }
+          ).chrome.storage.local.get('suntab:config', (value) => {
+            const config = value['suntab:config'] as {
+              wallpaper?: { kind?: string; value?: string };
+            };
+            resolve({
+              kind: config.wallpaper?.kind ?? '',
+              value: config.wallpaper?.value ?? '',
+            });
+          });
+        });
+      }),
+    )
+    .toEqual({ kind: 'gradient', value: DEFAULT_WALLPAPER });
+});
+
 test('moves an existing paper default to night after the update', async ({ newtab }) => {
   await newtab.evaluate(async (paper) => {
     await new Promise<void>((resolve) => {
@@ -258,11 +342,12 @@ test('moves an existing paper default to night after the update', async ({ newta
   ).toBe('1');
 });
 
-test('shows a favicon or globe without duplicating the name', async ({ newtab }) => {
+test('uses a text initial when no SVG is available', async ({ newtab }) => {
   await addIcon(newtab, '无缓存图标', 'https://no-cached-icon.example');
   const tile = newtab.locator('.icon-tile[title="无缓存图标"]');
-  await expect(tile.locator('.thumb-text')).toHaveCount(0);
-  await expect(tile.locator('.thumb-img, .thumb-globe').first()).toBeVisible();
+  await expect(tile.locator('.thumb-text')).toBeVisible();
+  await expect(tile.locator('.thumb-globe')).toHaveCount(0);
+  await expect(tile.locator('.thumb-img')).toHaveCount(0);
 });
 
 test('renders the favicon inside the tile with padding', async ({ newtab }) => {
@@ -302,7 +387,7 @@ test('renders the favicon inside the tile with padding', async ({ newtab }) => {
       glyphs: element.querySelectorAll('.icon-glyph').length,
     };
   });
-  expect(layout).toEqual({ tile: 60, thumb: 60, image: 48, glyphs: 0 });
+  expect(layout).toEqual({ tile: 50, thumb: 50, image: 40, glyphs: 0 });
 });
 
 test('gives image icons a white default and allows changing it', async ({
@@ -367,6 +452,40 @@ test('gives image icons a white default and allows changing it', async ({
   }));
   expect(hoverState.shadow).toContain('0px 0px 10px');
   expect(hoverState.transform).toBe('none');
+});
+
+test('text icons keep up to six characters across two lines', async ({
+  newtab,
+}) => {
+  await seedNav(newtab, [
+    {
+      id: 'group-home',
+      name: '主页',
+      icon: 'home',
+      items: [
+        {
+          id: 'text-icon',
+          type: 'icon',
+          name: '网易云音乐',
+          url: 'https://music.example/',
+          icon: { kind: 'text', value: '网易云音乐', bg: '#c82c34' },
+        },
+      ],
+    },
+    { id: 'group-ai', name: 'AI', icon: 'ai', items: [] },
+  ]);
+
+  const lines = newtab.locator('.icon-tile[title="网易云音乐"] .thumb-text-line');
+  await expect(lines).toHaveCount(2);
+  await expect(lines.first()).toHaveText('网易云');
+  await expect(lines.last()).toHaveText('音乐');
+
+  await newtab.locator('.add-tile').click();
+  const dialog = newtab.getByRole('dialog', { name: '添加图标' });
+  await dialog.getByRole('tab', { name: '文字' }).click();
+  const textInput = dialog.getByLabel('图标文字');
+  await textInput.fill('一二三四五六七');
+  await expect(textInput).toHaveValue('一二三四五六');
 });
 
 test('centers short groups on the search axis', async ({ newtab }) => {
@@ -629,9 +748,9 @@ test('fills the tile when the icon image has its own background', async ({ newta
       .locator(`.icon-tile[title="${title}"] .thumb-img`)
       .evaluate((element) => element.getBoundingClientRect().width);
 
-  await expect.poll(() => imageWidth('透明图标')).toBe(48);
-  await expect.poll(() => imageWidth('满底图标')).toBe(60);
-  await expect.poll(() => imageWidth('圆角满底图标')).toBe(60);
+  await expect.poll(() => imageWidth('透明图标')).toBe(40);
+  await expect.poll(() => imageWidth('满底图标')).toBe(50);
+  await expect.poll(() => imageWidth('圆角满底图标')).toBe(50);
 
   const cardBackground = (title: string) =>
     newtab
@@ -655,6 +774,51 @@ test('fills the tile when the icon image has its own background', async ({ newta
         .evaluate((element) => getComputedStyle(element).boxShadow),
     )
     .not.toContain('0px 0px 0px 1px');
+});
+
+test('keeps portrait transparent icons padded instead of clipping them', async ({
+  newtab,
+}) => {
+  const portrait = `data:image/svg+xml,${encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 200"><rect x="25" width="50" height="200" fill="#c82c34"/><rect x="25" width="50" height="30" fill="#3fae7a"/><rect x="25" y="170" width="50" height="30" fill="#4c8dff"/></svg>',
+  )}`;
+
+  await seedNav(newtab, [
+    {
+      id: 'group-home',
+      name: '主页',
+      icon: 'home',
+      items: [
+        {
+          id: 'portrait-icon',
+          type: 'icon',
+          name: '竖版透明图标',
+          url: 'https://portrait.example/',
+          icon: { kind: 'url', value: portrait },
+        },
+      ],
+    },
+    { id: 'group-ai', name: 'AI', icon: 'ai', items: [] },
+  ]);
+
+  const tile = newtab.locator('.icon-tile[title="竖版透明图标"]');
+  await expect(tile.locator('.thumb')).not.toHaveClass(/is-cover/);
+
+  const layout = await tile.evaluate((element) => {
+    const card = element.querySelector('.icon-image')!.getBoundingClientRect();
+    const image = element.querySelector('.thumb-img')!.getBoundingClientRect();
+    return {
+      imageWidth: image.width,
+      imageHeight: image.height,
+      topInset: image.top - card.top,
+      cardBg: getComputedStyle(element.querySelector('.icon-image')!)
+        .backgroundColor,
+    };
+  });
+  expect(layout.imageWidth).toBe(40);
+  expect(layout.imageHeight).toBe(40);
+  expect(layout.topInset).toBe(5);
+  expect(layout.cardBg).toBe('rgb(255, 255, 255)');
 });
 
 test('settings persist and focus returns to the opener', async ({ newtab }) => {
@@ -745,27 +909,7 @@ test('adds, edits, drags and deletes icons with persistence', async ({ newtab })
 test('uploads an icon to IndexedDB and cleans the blob on delete', async ({
   newtab,
 }) => {
-  const iconBlobCount = () =>
-    newtab.evaluate(
-      () =>
-        new Promise<number>((resolve) => {
-          const request = indexedDB.open('suntab');
-          request.onsuccess = () => {
-            const db = request.result;
-            if (!db.objectStoreNames.contains('icons')) {
-              resolve(0);
-              return;
-            }
-            const count = db
-              .transaction('icons', 'readonly')
-              .objectStore('icons')
-              .count();
-            count.onsuccess = () => resolve(count.result);
-            count.onerror = () => resolve(-1);
-          };
-          request.onerror = () => resolve(-1);
-        }),
-    );
+  const iconBlobCount = () => tableCount(newtab, 'icons');
 
   await newtab.locator('.add-tile').click();
   const dialog = newtab.getByRole('dialog', { name: '添加图标' });
@@ -932,27 +1076,7 @@ test('exports an svg upload in the backup', async ({ newtab }) => {
 });
 
 test('exports uploaded icons and restores them from a backup', async ({ newtab }) => {
-  const iconBlobCount = () =>
-    newtab.evaluate(
-      () =>
-        new Promise<number>((resolve) => {
-          const request = indexedDB.open('suntab');
-          request.onsuccess = () => {
-            const db = request.result;
-            if (!db.objectStoreNames.contains('icons')) {
-              resolve(0);
-              return;
-            }
-            const count = db
-              .transaction('icons', 'readonly')
-              .objectStore('icons')
-              .count();
-            count.onsuccess = () => resolve(count.result);
-            count.onerror = () => resolve(-1);
-          };
-          request.onerror = () => resolve(-1);
-        }),
-    );
+  const iconBlobCount = () => tableCount(newtab, 'icons');
 
   await newtab.locator('.add-tile').click();
   const dialog = newtab.getByRole('dialog', { name: '添加图标' });
@@ -1015,6 +1139,51 @@ test('exports uploaded icons and restores them from a backup', async ({ newtab }
   const restored = newtab.locator('.icon-tile[title="备份图标测试"]');
   await expect(restored).toBeVisible();
   await expect(restored.locator('img')).toHaveAttribute('src', /^blob:/);
+  await expect.poll(iconBlobCount).toBe(1);
+});
+
+test('import removes icon blobs no longer referenced by the new navigation', async ({
+  newtab,
+}) => {
+  const iconBlobCount = () => tableCount(newtab, 'icons');
+  const uploadIcon = async (name: string, url: string, file: string) => {
+    await newtab.locator('.add-tile').click();
+    const dialog = newtab.getByRole('dialog', { name: '添加图标' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByLabel('名称', { exact: true }).fill(name);
+    await dialog.getByLabel('网址', { exact: true }).fill(url);
+    await dialog.getByRole('tab', { name: '上传' }).click();
+    await dialog.locator('input[type="file"]').setInputFiles(path.resolve(file));
+    await expect(dialog.locator('.upload-thumb img')).toBeVisible();
+    await dialog.locator('.dialog-footer .panel-btn.primary').click();
+    await expect(dialog).toBeHidden();
+  };
+
+  await uploadIcon('保留图标', 'keep.example.com', 'public/icon/128.png');
+  await expect.poll(iconBlobCount).toBe(1);
+
+  await openDataSettings(newtab);
+  const downloadPromise = newtab.waitForEvent('download');
+  await newtab.getByRole('button', { name: '导出 JSON' }).click();
+  const download = await downloadPromise;
+  const backupPath = await download.path();
+  if (!backupPath) throw new Error('没有拿到备份文件');
+  await newtab.keyboard.press('Escape');
+
+  await uploadIcon('旧图标', 'old.example.com', 'public/icon/48.png');
+  await expect.poll(iconBlobCount).toBe(2);
+
+  await openDataSettings(newtab);
+  await newtab.locator('.data-card input[type="file"]').setInputFiles(backupPath);
+  await expect(newtab.locator('.import-preview')).toContainText(
+    '只写回新导航引用的图标',
+  );
+  await newtab.getByRole('button', { name: '确认导入' }).click();
+  await expect(newtab.locator('.status')).toContainText('清理 1 个旧图标');
+  await newtab.keyboard.press('Escape');
+
+  await expect(newtab.locator('.icon-tile[title="保留图标"]')).toBeVisible();
+  await expect(newtab.locator('.icon-tile[title="旧图标"]')).toHaveCount(0);
   await expect.poll(iconBlobCount).toBe(1);
 });
 
@@ -1157,6 +1326,7 @@ test('popup adds the current page and rejects duplicates', async ({
   await popup.getByRole('button', { name: '添加到 SunTab' }).click();
   await expect(popup.locator('.saved')).toContainText('已添加');
   await expect(popup.locator('.saved')).toContainText('主页');
+  await expect(popup.locator('.saved-fallback')).toContainText('没抓到网站图标');
 
   await newtab.reload();
   await expect(newtab.locator('.clock')).toBeVisible();

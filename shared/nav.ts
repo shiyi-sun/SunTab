@@ -1,7 +1,27 @@
 import type { IconItem, NavGroup, NavItem } from './types';
 
+export const MAX_ICON_TEXT_CHARS = 6;
+
 export function clampName(value: string, max = 48): string {
   return Array.from(value.trim()).slice(0, max).join('');
+}
+
+export function clampIconText(
+  value: string,
+  max = MAX_ICON_TEXT_CHARS,
+): string {
+  return Array.from(value.trim()).slice(0, max).join('');
+}
+
+export function splitIconText(value: string): string[] {
+  const chars = Array.from(clampIconText(value));
+  if (!chars.length) return [];
+  if (chars.length <= 3) return [chars.join('')];
+  const perLine = Math.ceil(chars.length / 2);
+  return [
+    chars.slice(0, perLine).join(''),
+    chars.slice(perLine).join(''),
+  ];
 }
 
 export function normalizeHttpUrl(input: string): string | null {

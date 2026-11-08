@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { sanitizeNavGroups } from '../shared/storage';
 import {
+  clampIconText,
   clampName,
   countNavItems,
   findIconByUrl,
+  MAX_ICON_TEXT_CHARS,
   normalizeHttpUrl,
   normalizeIconUrl,
+  splitIconText,
 } from '../shared/nav';
 import type { IconItem, NavGroup } from '../shared/types';
 
@@ -42,6 +45,21 @@ describe('nav utilities', () => {
   it('clamps names by characters rather than code units', () => {
     expect(clampName('  你好世界  ')).toBe('你好世界');
     expect(Array.from(clampName('a'.repeat(60))).length).toBe(48);
+  });
+
+  it('clamps and balances text icon labels in up to two lines', () => {
+    expect(clampIconText('  哔哩哔哩  ')).toBe('哔哩哔哩');
+    expect(Array.from(clampIconText('一二三四五六七')).length).toBe(
+      MAX_ICON_TEXT_CHARS,
+    );
+    expect(splitIconText('')).toEqual([]);
+    expect(splitIconText('知')).toEqual(['知']);
+    expect(splitIconText('知乎')).toEqual(['知乎']);
+    expect(splitIconText('Git')).toEqual(['Git']);
+    expect(splitIconText('哔哩哔')).toEqual(['哔哩哔']);
+    expect(splitIconText('哔哩哔哩')).toEqual(['哔哩', '哔哩']);
+    expect(splitIconText('网易云音乐')).toEqual(['网易云', '音乐']);
+    expect(splitIconText('一二三四五六')).toEqual(['一二三', '四五六']);
   });
 
   it('finds duplicate urls case-insensitively', () => {

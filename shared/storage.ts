@@ -194,6 +194,27 @@ function migrateSearchOpenDefault(config: AppConfig): boolean {
   return true;
 }
 
+const ICON_LAYOUT_MIGRATION_KEY = 'suntab:migrated-icon-layout-025';
+
+export function migrateIconLayoutDefaults(config: AppConfig): boolean {
+  try {
+    if (localStorage.getItem(ICON_LAYOUT_MIGRATION_KEY) === '1') return false;
+    localStorage.setItem(ICON_LAYOUT_MIGRATION_KEY, '1');
+  } catch {
+    return false;
+  }
+  let changed = false;
+  if (config.icon.size === 60) {
+    config.icon.size = 50;
+    changed = true;
+  }
+  if (config.icon.maxWidth === 1400) {
+    config.icon.maxWidth = 800;
+    changed = true;
+  }
+  return changed;
+}
+
 export async function loadConfig(): Promise<AppConfig> {
   const area = getStorageArea();
   if (!area) return createDefaultConfig();
@@ -211,7 +232,8 @@ export async function loadConfig(): Promise<AppConfig> {
     const wallpaperMigrated = migrateConfig(config);
     const nightMigrated = migrateDefaultWallpaper(config);
     const searchMigrated = migrateSearchOpenDefault(config);
-    if (wallpaperMigrated || nightMigrated || searchMigrated) {
+    const iconLayoutMigrated = migrateIconLayoutDefaults(config);
+    if (wallpaperMigrated || nightMigrated || searchMigrated || iconLayoutMigrated) {
       try {
         await area.set({ [STORAGE_KEYS.config]: config });
       } catch {

@@ -7,6 +7,7 @@ import {
   DARK_ICON_BG,
   DEFAULT_ICON_BG,
   getIconColor,
+  getIconInitial,
   ICON_BACKGROUND_PALETTE,
   TEXT_ICON_PALETTE,
   TRANSPARENT_ICON_BG,
@@ -22,7 +23,14 @@ import {
   requestSiteAccess,
   type SiteSvgIcon,
 } from '../../shared/siteIcon';
-import { clampName, findIconByUrl, normalizeHttpUrl, normalizeIconUrl } from '../../shared/nav';
+import {
+  clampIconText,
+  clampName,
+  findIconByUrl,
+  MAX_ICON_TEXT_CHARS,
+  normalizeHttpUrl,
+  normalizeIconUrl,
+} from '../../shared/nav';
 import type { IconDraft, IconItem, IconKind, IconSpec } from '../../shared/types';
 
 const props = withDefaults(
@@ -73,7 +81,7 @@ const previewSpec = computed<IconSpec>(() => {
     };
   }
   if (kind.value === 'text') {
-    return { kind: 'text', value: Array.from(textValue.value.trim()).slice(0, 2).join(''), bg: bg.value };
+    return { kind: 'text', value: clampIconText(textValue.value), bg: bg.value };
   }
   if (kind.value === 'url') {
     return { kind: 'url', value: iconValue.value.trim(), bg: bg.value };
@@ -130,7 +138,7 @@ function setKind(next: IconKind) {
   error.value = '';
   if (next === 'text') {
     if (!textValue.value) {
-      textValue.value = Array.from(name.value.trim()).slice(0, 2).join('');
+      textValue.value = clampIconText(name.value, 4);
     }
     if (
       !bg.value ||
@@ -253,7 +261,7 @@ async function submit() {
   } else if (kind.value === 'text') {
     icon = {
       kind: 'text',
-      value: Array.from(textValue.value.trim()).slice(0, 2).join(''),
+      value: clampIconText(textValue.value),
       bg: bg.value,
     };
   } else if (kind.value === 'url') {
@@ -283,7 +291,17 @@ async function submit() {
         busy.value = false;
       }
     } else {
-      icon = { kind: 'favicon', value: '', bg: bg.value };
+      const textBg =
+        bg.value &&
+        bg.value !== DEFAULT_ICON_BG &&
+        bg.value !== TRANSPARENT_ICON_BG
+          ? bg.value
+          : getIconColor(cleanName);
+      icon = {
+        kind: 'text',
+        value: getIconInitial(cleanName),
+        bg: textBg,
+      };
     }
   }
 
@@ -372,7 +390,8 @@ async function submit() {
 
       <div class="source-body">
         <p v-if="kind === 'favicon'" class="hint">
-          优先解析站点声明的 SVG（首次需一次性授权访问网站），拿不到时回退到浏览器本地图标缓存。
+          优先解析站点声明的 SVG（首次需一次性授权访问网站）；横向品牌图只取独立标志。
+          找不到 SVG 时使用文字首字，不保存低清位图。
         </p>
 
         <template v-else-if="kind === 'text'">
@@ -382,8 +401,8 @@ async function submit() {
               <input
                 v-model="textValue"
                 class="panel-input"
-                maxlength="2"
-                placeholder="自动"
+                :maxlength="MAX_ICON_TEXT_CHARS"
+                placeholder="最多 6 字，留空自动"
               />
             </label>
             <label class="field compact">

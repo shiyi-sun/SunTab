@@ -59,6 +59,22 @@ export function collectUploadIconIds(groups: NavGroup[]): string[] {
   return [...ids];
 }
 
+export function filterBackupIconsForNav(
+  files: BackupIconFile[],
+  groups: NavGroup[],
+): BackupIconFile[] {
+  const ids = new Set(collectUploadIconIds(groups));
+  return files.filter((file) => ids.has(file.id));
+}
+
+export function collectOrphanIconIds(
+  records: Array<{ id: string }>,
+  groups: NavGroup[],
+): string[] {
+  const ids = new Set(collectUploadIconIds(groups));
+  return records.filter((record) => !ids.has(record.id)).map((record) => record.id);
+}
+
 export async function collectBackupIcons(groups: NavGroup[]): Promise<BackupIconFile[]> {
   const ids = new Set(collectUploadIconIds(groups));
   if (!ids.size) return [];

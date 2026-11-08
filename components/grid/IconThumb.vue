@@ -8,6 +8,7 @@ import {
   TRANSPARENT_ICON_BG,
 } from '../../shared/color';
 import { getIconBlobUrl } from '../../shared/iconBlobs';
+import { splitIconText } from '../../shared/nav';
 import type { IconSpec } from '../../shared/types';
 
 const props = withDefaults(
@@ -29,7 +30,7 @@ const loadingUpload = ref(false);
 let requestToken = 0;
 
 const EDGE_SAMPLE_SIZE = 48;
-const COVER_EDGE_RATIO = 0.15;
+const COVER_EDGE_RATIO = 0.5;
 const coverCache = new Map<string, boolean>();
 
 const cover = ref(false);
@@ -52,19 +53,22 @@ function detectCover(image: HTMLImageElement, key: string): boolean {
       EDGE_SAMPLE_SIZE,
       EDGE_SAMPLE_SIZE,
     ).data;
-    let opaque = 0;
-    let total = 0;
-    const check = (x: number, y: number) => {
-      total += 1;
-      if (pixels[(y * EDGE_SAMPLE_SIZE + x) * 4 + 3]! > 127) opaque += 1;
+    // Full-bleed means opaque on every side. Checking the aggregate lets a
+    // portrait or landscape image pass just by touching two edges, which
+    // removes the 80% padding and clips its ends against the rounded card.
+    const opaque = [0, 0, 0, 0];
+    const check = (side: number, x: number, y: number) => {
+      if (pixels[(y * EDGE_SAMPLE_SIZE + x) * 4 + 3]! > 127) opaque[side]! += 1;
     };
     for (let index = 0; index < EDGE_SAMPLE_SIZE; index += 1) {
-      check(index, 0);
-      check(index, EDGE_SAMPLE_SIZE - 1);
-      check(0, index);
-      check(EDGE_SAMPLE_SIZE - 1, index);
+      check(0, index, 0);
+      check(1, EDGE_SAMPLE_SIZE - 1, index);
+      check(2, index, EDGE_SAMPLE_SIZE - 1);
+      check(3, 0, index);
     }
-    const result = opaque / total >= COVER_EDGE_RATIO;
+    const result = opaque.every(
+      (count) => count / EDGE_SAMPLE_SIZE >= COVER_EDGE_RATIO,
+    );
     coverCache.set(key, result);
     return result;
   } catch {
@@ -104,13 +108,30 @@ function onImageLoad(event: Event) {
 }
 
 const showImage = computed(() => Boolean(src.value) && !failed.value);
-const text = computed(() => {
-  const custom = props.icon.kind === 'text' ? props.icon.value.trim() : '';
-  return Array.from(custom).slice(0, 2).join('') || getIconInitial(props.name);
+const textLines = computed(() => {
+  const custom = props.icon.kind === 'text' ? props.icon.value : '';
+  const lines = splitIconText(custom);
+  return lines.length ? lines : splitIconText(getIconInitial(props.name));
 });
-const textStyle = computed(() => ({
-  background: props.icon.bg || getIconColor(props.name),
-}));
+const textStyle = computed(() => {
+  const longest = Math.max(
+    ...textLines.value.map((line) => Array.from(line).length),
+  );
+  const fontSize =
+    textLines.value.length > 1
+      ? longest > 2
+        ? '26cqw'
+        : '34cqw'
+      : longest > 2
+        ? '28cqw'
+        : longest > 1
+          ? '40cqw'
+          : '52cqw';
+  return {
+    background: props.icon.bg || getIconColor(props.name),
+    fontSize,
+  };
+});
 const imageStyle = computed(() => {
   if (props.icon.kind === 'text') return undefined;
   if (cover.value) return { backgroundColor: 'transparent' };
@@ -157,7 +178,11 @@ watch(
       @error="failed = true"
     />
     <span v-else-if="icon.kind === 'text'" class="thumb-text" :style="textStyle">
-      {{ text }}
+      <span
+        v-for="(line, index) in textLines"
+        :key="index"
+        class="thumb-text-line"
+      >{{ line }}</span>
     </span>
     <span v-else-if="!loadingUpload" class="thumb-globe" aria-hidden="true">
       <IconWorld size="20" stroke="1.6" />
@@ -170,6 +195,7 @@ watch(
   display: grid;
   width: 100%;
   height: 100%;
+  grid-template-rows: 100%;
   overflow: hidden;
   border-radius: inherit;
   place-items: center;
@@ -192,14 +218,19 @@ watch(
   display: flex;
   width: 100%;
   height: 100%;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   color: #fff;
-  font-size: clamp(8px, 38cqw, 22px);
   font-weight: 650;
   letter-spacing: 0.01em;
-  line-height: 1;
+  line-height: 1.1;
   text-align: center;
+}
+
+.thumb-text-line {
+  display: block;
+  white-space: nowrap;
 }
 
 .thumb-globe {

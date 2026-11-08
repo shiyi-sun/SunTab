@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  collectOrphanIconIds,
   collectUploadIconIds,
   countNavItems,
   createBackup,
   dataUrlToBlob,
+  filterBackupIconsForNav,
   parseBackup,
   sanitizeBackupIcons,
 } from '../shared/backup';
@@ -201,6 +203,51 @@ describe('backup', () => {
       },
     ];
     expect(collectUploadIconIds(nav).sort()).toEqual(['icon-a', 'icon-c']);
+  });
+
+  it('filters imported icons and finds orphans using nav references', () => {
+    const nav: NavGroup[] = [
+      {
+        id: 'g1',
+        name: '主页',
+        icon: 'home',
+        items: [
+          {
+            id: 'a',
+            type: 'icon',
+            name: 'A',
+            url: 'https://a.example',
+            icon: { kind: 'upload', value: 'icon-a' },
+          },
+          {
+            id: 'folder',
+            type: 'folder',
+            name: '文件夹',
+            children: [
+              {
+                id: 'c',
+                type: 'icon',
+                name: 'C',
+                url: 'https://c.example',
+                icon: { kind: 'upload', value: 'icon-c' },
+              },
+            ],
+          },
+        ],
+      },
+    ];
+    const files = [
+      { id: 'icon-a', type: 'image/webp', dataUrl: TINY_ICON },
+      { id: 'icon-b', type: 'image/webp', dataUrl: TINY_ICON },
+      { id: 'icon-c', type: 'image/webp', dataUrl: TINY_ICON },
+    ];
+    expect(filterBackupIconsForNav(files, nav).map((file) => file.id)).toEqual([
+      'icon-a',
+      'icon-c',
+    ]);
+    expect(
+      collectOrphanIconIds([{ id: 'icon-a' }, { id: 'icon-b' }, { id: 'icon-c' }], nav),
+    ).toEqual(['icon-b']);
   });
 
   it('decodes base64 data urls back to image blobs', async () => {

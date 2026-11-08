@@ -26,6 +26,18 @@ const SVG_COLOR =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="22" fill="#169b62"/></svg>';
 const SVG_EXTERNAL =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><use href="https://example.com/sprite.svg#logo"/></svg>';
+const BRAND_LOCKUP_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40"><rect width="40" height="40" rx="8" fill="#c82c34"/><circle cx="20" cy="20" r="8" fill="#ffd166"/><text x="52" y="29" font-family="sans-serif" font-size="24" fill="#222222">Brand</text></svg>';
+const BRAND_RIGHT_MARK_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 40"><text x="0" y="29" font-family="sans-serif" font-size="24" fill="#222222">Brand</text><rect x="80" width="40" height="40" rx="8" fill="#3fae7a"/><circle cx="100" cy="20" r="8" fill="#ffd166"/></svg>';
+const BRAND_STACK_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 80"><rect x="12" width="40" height="40" rx="8" fill="#3b78c9"/><text x="32" y="70" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#222222">Brand</text></svg>';
+const BRAND_STACK_REVERSE_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 80"><text x="32" y="16" text-anchor="middle" font-family="sans-serif" font-size="16" fill="#222222">Brand</text><rect x="12" y="40" width="40" height="40" rx="8" fill="#7c5cff"/></svg>';
+const BRAND_INTEGRATED_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80"><circle cx="40" cy="40" r="38" fill="#3b78c9"/><text x="40" y="46" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#ffd166">Brand</text></svg>';
+const BRAND_WORDMARK_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 40"><text x="0" y="30" font-family="sans-serif" font-size="28" fill="#222222">BrandName</text></svg>';
 
 let server: http.Server;
 let base = '';
@@ -52,6 +64,19 @@ test.beforeAll(async () => {
     if (url === '/manifest-icon.svg') {
       response.setHeader('Content-Type', 'image/svg+xml');
       response.end(SVG_MANIFEST);
+      return;
+    }
+    const brandSvgs: Record<string, string> = {
+      '/brand-lockup.svg': BRAND_LOCKUP_SVG,
+      '/brand-right-mark.svg': BRAND_RIGHT_MARK_SVG,
+      '/brand-stack.svg': BRAND_STACK_SVG,
+      '/brand-stack-reverse.svg': BRAND_STACK_REVERSE_SVG,
+      '/brand-integrated.svg': BRAND_INTEGRATED_SVG,
+      '/brand-wordmark.svg': BRAND_WORDMARK_SVG,
+    };
+    if (brandSvgs[url]) {
+      response.setHeader('Content-Type', 'image/svg+xml');
+      response.end(brandSvgs[url]);
       return;
     }
     if (url === '/app.webmanifest') {
@@ -102,6 +127,20 @@ test.beforeAll(async () => {
       );
       return;
     }
+    const brandPages: Record<string, string> = {
+      '/brand-lockup': '/brand-lockup.svg',
+      '/brand-right-mark': '/brand-right-mark.svg',
+      '/brand-stack': '/brand-stack.svg',
+      '/brand-stack-reverse': '/brand-stack-reverse.svg',
+      '/brand-integrated': '/brand-integrated.svg',
+      '/brand-wordmark': '/brand-wordmark.svg',
+    };
+    if (brandPages[url]) {
+      response.end(
+        `<!doctype html><title>brand</title><header><a class="logo" href="/"><img src="${brandPages[url]}" alt="品牌"></a></header><h1>brand</h1>`,
+      );
+      return;
+    }
     response.end('<!doctype html><title>plain</title><h1>plain</h1>');
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -136,7 +175,7 @@ async function addIcon(page: Page, name: string, url: string) {
 
 async function readNav(
   page: Page,
-): Promise<Array<{ name: string; kind: string; bg: string }>> {
+): Promise<Array<{ name: string; kind: string; bg: string; value: string }>> {
   return page.evaluate(
     () =>
       new Promise((resolve) => {
@@ -158,7 +197,7 @@ async function readNav(
             items: Array<{
               name?: string;
               type?: string;
-              icon?: { kind?: string; bg?: string };
+              icon?: { kind?: string; bg?: string; value?: string };
             }>;
           }>;
           resolve(
@@ -170,6 +209,7 @@ async function readNav(
                         name: item.name ?? '',
                         kind: item.icon?.kind ?? '',
                         bg: item.icon?.bg ?? '',
+                        value: item.icon?.value ?? '',
                       },
                     ]
                   : [],
@@ -178,7 +218,36 @@ async function readNav(
           );
         });
       }),
-  ) as Promise<Array<{ name: string; kind: string; bg: string }>>;
+  ) as Promise<
+    Array<{ name: string; kind: string; bg: string; value: string }>
+  >;
+}
+
+async function readIconSvg(page: Page, id: string): Promise<string> {
+  return page.evaluate(
+    (blobId) =>
+      new Promise<string>((resolve, reject) => {
+        const request = indexedDB.open('suntab');
+        request.onsuccess = () => {
+          const db = request.result;
+          if (!db.objectStoreNames.contains('icons')) {
+            resolve('');
+            return;
+          }
+          const get = db
+            .transaction('icons', 'readonly')
+            .objectStore('icons')
+            .get(blobId);
+          get.onsuccess = async () => {
+            const record = get.result as { blob?: Blob } | undefined;
+            resolve(record?.blob ? await record.blob.text() : '');
+          };
+          get.onerror = () => reject(get.error);
+        };
+        request.onerror = () => reject(request.error);
+      }),
+    id,
+  );
 }
 
 async function thumbBackground(page: Page, name: string): Promise<string> {
@@ -239,8 +308,13 @@ test('automatic icons resolve site svg from link, manifest and fall back', async
     const manifestImg = await addIcon(page, '清单 SVG', `${base}/manifest`);
     await expect(manifestImg).toHaveAttribute('src', /^blob:/);
 
-    const plainImg = await addIcon(page, '无 SVG', `${base}/plain`);
-    await expect(plainImg).toHaveAttribute('src', /_favicon/);
+    await addIcon(page, '无 SVG', `${base}/plain`);
+    await addIcon(page, '品牌裁标志', `${base}/brand-lockup`);
+    await addIcon(page, '品牌右标志', `${base}/brand-right-mark`);
+    await addIcon(page, '品牌上标志', `${base}/brand-stack`);
+    await addIcon(page, '品牌下标志', `${base}/brand-stack-reverse`);
+    await addIcon(page, '品牌整体', `${base}/brand-integrated`);
+    await addIcon(page, '纯文字品牌', `${base}/brand-wordmark`);
 
     const whiteThemeImg = await addIcon(
       page,
@@ -259,15 +333,45 @@ test('automatic icons resolve site svg from link, manifest and fall back', async
     const blankImg = await addIcon(page, '空白优先', `${base}/blank-first`);
     await expect(blankImg).toHaveAttribute('src', /^blob:/);
 
-    await expect.poll(async () => (await readNav(page)).length).toBe(7);
+    await expect.poll(async () => (await readNav(page)).length).toBe(13);
     const nav = await readNav(page);
     expect(nav.find((item) => item.name === '链接 SVG')?.kind).toBe('upload');
     expect(nav.find((item) => item.name === '清单 SVG')?.kind).toBe('upload');
-    expect(nav.find((item) => item.name === '无 SVG')?.kind).toBe('favicon');
+    expect(nav.find((item) => item.name === '无 SVG')?.kind).toBe('text');
+    expect(nav.find((item) => item.name === '品牌裁标志')?.kind).toBe('upload');
+    expect(nav.find((item) => item.name === '品牌右标志')?.kind).toBe('upload');
+    expect(nav.find((item) => item.name === '品牌上标志')?.kind).toBe('upload');
+    expect(nav.find((item) => item.name === '品牌下标志')?.kind).toBe('upload');
+    expect(nav.find((item) => item.name === '品牌整体')?.kind).toBe('upload');
+    expect(nav.find((item) => item.name === '纯文字品牌')?.kind).toBe('text');
     expect(nav.find((item) => item.name === '白色主题色')?.bg).toBe('#102030');
     expect(nav.find((item) => item.name === '白色无主题')?.bg).toBe('#1f1f1f');
     expect(nav.find((item) => item.name === 'mask 顺序')?.bg).toBe('#ffffff');
     expect(nav.find((item) => item.name === '空白优先')?.bg).toBe('#ffffff');
+
+    for (const name of ['品牌裁标志', '品牌右标志', '品牌上标志', '品牌下标志']) {
+      const item = nav.find((entry) => entry.name === name);
+      const svg = await readIconSvg(page, item?.value ?? '');
+      expect(svg).toContain('<svg');
+      expect(svg).toContain('viewBox');
+      expect(svg).not.toContain('Brand');
+      expect(svg).not.toContain('<text');
+    }
+
+    const integrated = nav.find((item) => item.name === '品牌整体');
+    const integratedSvg = await readIconSvg(page, integrated?.value ?? '');
+    expect(integratedSvg).toContain('Brand');
+    expect(integratedSvg).toContain('0 0 80 80');
+
+    await expect(
+      page.locator('.icon-tile[title="纯文字品牌"] .thumb-text'),
+    ).toBeVisible();
+    await expect(
+      page.locator('.icon-tile[title="无 SVG"] .thumb-text'),
+    ).toBeVisible();
+    await expect(
+      page.locator('.icon-tile[title="无 SVG"] .thumb-globe'),
+    ).toHaveCount(0);
 
     await expect
       .poll(() => thumbBackground(page, '白色主题色'))
@@ -323,7 +427,7 @@ test('automatic icons resolve site svg from link, manifest and fall back', async
     await popup.getByRole('button', { name: '添加到 SunTab' }).click();
     await expect(popup.locator('.saved')).toContainText('已添加');
 
-    await expect.poll(async () => (await readNav(page)).length).toBe(8);
+    await expect.poll(async () => (await readNav(page)).length).toBe(14);
     const navAfterPopup = await readNav(page);
     expect(
       navAfterPopup.find((item) => item.name === '快速添加 SVG')?.kind,
