@@ -23,7 +23,7 @@ const shortcuts = [
         </div>
       </div>
       <p>
-        配置、壁纸与图标数据保存在本机浏览器；只有开启“必应每日”时才会访问 bing.com。
+        配置、壁纸与图标数据保存在本机浏览器；只有开启“必应每日”或添加自动图标时才会访问相应网站。
       </p>
       <div class="about-author">
         <span>公众号：</span>

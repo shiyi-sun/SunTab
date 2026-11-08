@@ -130,3 +130,99 @@ export function blobToDataUrl(blob: Blob): Promise<string> {
     reader.readAsDataURL(blob);
   });
 }
+
+export function ensureImageDecodes(blob: Blob): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(blob);
+    const image = new Image();
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve();
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('无法解码图片'));
+    };
+    image.src = objectUrl;
+  });
+}
+
+export interface IconVisibility {
+  blank: boolean;
+  whiteOnly: boolean;
+  whiteSheet: boolean;
+}
+
+const VISIBILITY_SAMPLE = 32;
+
+function loadImageElement(objectUrl: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('无法解码图片'));
+    image.src = objectUrl;
+  });
+}
+
+export async function analyzeIconVisibility(
+  blob: Blob,
+): Promise<IconVisibility> {
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const image = await loadImageElement(objectUrl);
+    const canvas = document.createElement('canvas');
+    canvas.width = VISIBILITY_SAMPLE;
+    canvas.height = VISIBILITY_SAMPLE;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) return { blank: false, whiteOnly: false, whiteSheet: false };
+    context.clearRect(0, 0, VISIBILITY_SAMPLE, VISIBILITY_SAMPLE);
+    const width = image.naturalWidth || VISIBILITY_SAMPLE;
+    const height = image.naturalHeight || VISIBILITY_SAMPLE;
+    const scale = Math.min(VISIBILITY_SAMPLE / width, VISIBILITY_SAMPLE / height);
+    const drawWidth = Math.max(1, Math.round(width * scale));
+    const drawHeight = Math.max(1, Math.round(height * scale));
+    context.imageSmoothingQuality = 'high';
+    context.drawImage(
+      image,
+      Math.round((VISIBILITY_SAMPLE - drawWidth) / 2),
+      Math.round((VISIBILITY_SAMPLE - drawHeight) / 2),
+      drawWidth,
+      drawHeight,
+    );
+    const pixels = context.getImageData(
+      0,
+      0,
+      VISIBILITY_SAMPLE,
+      VISIBILITY_SAMPLE,
+    ).data;
+    let alphaWeight = 0;
+    let whiteWeight = 0;
+    let otherWeight = 0;
+    for (let index = 0; index < pixels.length; index += 4) {
+      const alpha = pixels[index + 3]! / 255;
+      if (alpha < 0.06) continue;
+      alphaWeight += alpha;
+      const min = Math.min(pixels[index]!, pixels[index + 1]!, pixels[index + 2]!);
+      if (min >= 235) {
+        whiteWeight += alpha;
+      } else {
+        otherWeight += alpha;
+      }
+    }
+    const total = VISIBILITY_SAMPLE * VISIBILITY_SAMPLE;
+    const coverage = alphaWeight / total;
+    const artwork = whiteWeight + otherWeight;
+    const blank = coverage < 0.002;
+    const whiteSheet = coverage >= 0.9 && otherWeight / total < 0.002;
+    const whiteOnly =
+      !blank &&
+      !whiteSheet &&
+      coverage < 0.9 &&
+      whiteWeight / Math.max(artwork, 0.000001) >= 0.9;
+    return { blank, whiteOnly, whiteSheet };
+  } catch {
+    return { blank: false, whiteOnly: false, whiteSheet: false };
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}

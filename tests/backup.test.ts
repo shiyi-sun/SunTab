@@ -143,6 +143,18 @@ describe('backup', () => {
     expect(icons.map((icon) => icon.id)).toEqual(['ok']);
   });
 
+  it('keeps svg uploads in backups', async () => {
+    const dataUrl = `data:image/svg+xml;base64,${Buffer.from(
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"/>',
+    ).toString('base64')}`;
+    const icons = sanitizeBackupIcons([{ id: 'svg-icon', dataUrl }]);
+    expect(icons).toHaveLength(1);
+    expect(icons[0]?.type).toBe('image/svg+xml');
+    const blob = dataUrlToBlob(dataUrl);
+    expect(blob?.type).toBe('image/svg+xml');
+    expect(await blob?.text()).toContain('<svg');
+  });
+
   it('collects only referenced upload icon ids', () => {
     const nav: NavGroup[] = [
       {

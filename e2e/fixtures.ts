@@ -35,6 +35,25 @@ export const test = base.extend<Fixtures>({
         '--lang=zh-CN',
       ],
     });
+    // Playwright cannot answer Chrome's extension permission bubble; run tests
+    // as if the user declined site access so icon adds stay offline and fast.
+    await context.addInitScript(() => {
+      const chromeApi = (
+        globalThis as unknown as {
+          chrome?: {
+            permissions?: {
+              request(
+                details: unknown,
+                callback: (granted: boolean) => void,
+              ): void;
+            };
+          };
+        }
+      ).chrome;
+      if (chromeApi?.permissions?.request) {
+        chromeApi.permissions.request = (_details, callback) => callback(false);
+      }
+    });
     await use(context);
     await context.close();
     try {

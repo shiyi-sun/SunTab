@@ -797,6 +797,140 @@ test('uploads an icon to IndexedDB and cleans the blob on delete', async ({
   await expect.poll(iconBlobCount).toBe(0);
 });
 
+test('uploads an svg icon without rasterizing it', async ({ newtab }) => {
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><circle cx="32" cy="32" r="22" fill="#c33"/></svg>';
+
+  await newtab.locator('.add-tile').click();
+  const dialog = newtab.getByRole('dialog', { name: '添加图标' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByLabel('名称', { exact: true }).fill('SVG 上传');
+  await dialog.getByLabel('网址', { exact: true }).fill('svg.example.com');
+  await dialog.getByRole('tab', { name: '上传' }).click();
+  await dialog.locator('input[type="file"]').setInputFiles({
+    name: 'brand.svg',
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from(svg),
+  });
+  await expect(dialog.locator('.upload-thumb img')).toBeVisible();
+  await dialog.locator('.dialog-footer .panel-btn.primary').click();
+  await expect(dialog).toBeHidden();
+
+  await expect(
+    newtab.locator('.icon-tile[title="SVG 上传"] img'),
+  ).toBeVisible();
+
+  const stored = await newtab.evaluate(async () => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('suntab');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const records = await new Promise<Array<{ blob: Blob }>>((resolve) => {
+      const request = db
+        .transaction('icons', 'readonly')
+        .objectStore('icons')
+        .getAll();
+      request.onsuccess = () => resolve(request.result);
+    });
+    const blob = records[0]!.blob;
+    return { type: blob.type, size: blob.size, text: await blob.text() };
+  });
+  expect(stored.type).toBe('image/svg+xml');
+  expect(stored.text).toContain('<svg');
+  expect(stored.size).toBe(Buffer.byteLength(svg));
+});
+
+test('gives a white svg upload a dark backdrop', async ({ newtab }) => {
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="22" fill="#ffffff"/></svg>';
+
+  await newtab.locator('.add-tile').click();
+  const dialog = newtab.getByRole('dialog', { name: '添加图标' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByLabel('名称', { exact: true }).fill('白色上传');
+  await dialog.getByLabel('网址', { exact: true }).fill('white-upload.example.com');
+  await dialog.getByRole('tab', { name: '上传' }).click();
+  await dialog.locator('input[type="file"]').setInputFiles({
+    name: 'white.svg',
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from(svg),
+  });
+  await expect(dialog.locator('.upload-thumb img')).toBeVisible();
+  await expect(dialog.getByLabel('自定义图标底色')).toHaveValue('#1f1f1f');
+  await dialog.locator('.dialog-footer .panel-btn.primary').click();
+  await expect(dialog).toBeHidden();
+
+  const tile = newtab.locator('.icon-tile[title="白色上传"]');
+  await expect(tile.locator('img')).toBeVisible();
+  await expect(tile.locator('.thumb')).toHaveCSS(
+    'background-color',
+    'rgb(31, 31, 31)',
+  );
+
+  const readBg = () =>
+    newtab.evaluate(
+      () =>
+        new Promise<string>((resolve) => {
+          (
+            globalThis as unknown as {
+              chrome: {
+                storage: {
+                  local: {
+                    get(
+                      key: string,
+                      callback: (value: Record<string, unknown>) => void,
+                    ): void;
+                  };
+                };
+              };
+            }
+          ).chrome.storage.local.get('suntab:nav', (value) => {
+            const groups = (value['suntab:nav'] ?? []) as Array<{
+              items: Array<{ name?: string; icon?: { bg?: string } }>;
+            }>;
+            const item = groups
+              .flatMap((group) => group.items)
+              .find((entry) => entry.name === '白色上传');
+            resolve(item?.icon?.bg ?? '');
+          });
+        }),
+    );
+  await expect.poll(readBg).toBe('#1f1f1f');
+});
+
+test('exports an svg upload in the backup', async ({ newtab }) => {
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#0a7"/></svg>';
+
+  await newtab.locator('.add-tile').click();
+  const dialog = newtab.getByRole('dialog', { name: '添加图标' });
+  await expect(dialog).toBeVisible();
+  await dialog.getByLabel('名称', { exact: true }).fill('SVG 备份');
+  await dialog.getByLabel('网址', { exact: true }).fill('svg-backup.example.com');
+  await dialog.getByRole('tab', { name: '上传' }).click();
+  await dialog.locator('input[type="file"]').setInputFiles({
+    name: 'brand-nosize.svg',
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from(svg),
+  });
+  await expect(dialog.locator('.upload-thumb img')).toBeVisible();
+  await dialog.locator('.dialog-footer .panel-btn.primary').click();
+  await expect(dialog).toBeHidden();
+
+  await openDataSettings(newtab);
+  const downloadPromise = newtab.waitForEvent('download');
+  await newtab.getByRole('button', { name: '导出 JSON' }).click();
+  const download = await downloadPromise;
+  const backupPath = await download.path();
+  if (!backupPath) throw new Error('没有拿到备份文件');
+  const backup = JSON.parse(fs.readFileSync(backupPath, 'utf8')) as {
+    icons?: Array<{ type?: string; dataUrl: string }>;
+  };
+  expect(backup.icons).toHaveLength(1);
+  expect(backup.icons?.[0]?.dataUrl).toMatch(/^data:image\/svg\+xml;base64,/);
+});
+
 test('exports uploaded icons and restores them from a backup', async ({ newtab }) => {
   const iconBlobCount = () =>
     newtab.evaluate(

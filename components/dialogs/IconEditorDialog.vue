@@ -4,6 +4,7 @@ import { IconUpload } from '@tabler/icons-vue';
 import DialogShell from '../ui/DialogShell.vue';
 import IconThumb from '../grid/IconThumb.vue';
 import {
+  DARK_ICON_BG,
   DEFAULT_ICON_BG,
   getIconColor,
   ICON_BACKGROUND_PALETTE,
@@ -11,7 +12,16 @@ import {
   TRANSPARENT_ICON_BG,
 } from '../../shared/color';
 import { deleteIconBlob, saveIconBlob } from '../../shared/iconBlobs';
-import { processIconImage } from '../../shared/image';
+import {
+  analyzeIconVisibility,
+  ensureImageDecodes,
+  processIconImage,
+} from '../../shared/image';
+import {
+  fetchSiteSvgIcon,
+  requestSiteAccess,
+  type SiteSvgIcon,
+} from '../../shared/siteIcon';
 import { clampName, findIconByUrl, normalizeHttpUrl, normalizeIconUrl } from '../../shared/nav';
 import type { IconDraft, IconItem, IconKind, IconSpec } from '../../shared/types';
 
@@ -143,9 +153,14 @@ async function onFileInput(event: Event) {
   await handleFile(file);
 }
 
+function isSvgFile(file: File) {
+  return file.type === 'image/svg+xml' || /\.svg$/i.test(file.name);
+}
+
 async function handleFile(file: File | null | undefined) {
   if (!file) return;
-  if (!file.type.startsWith('image/')) {
+  const svg = isSvgFile(file);
+  if (!svg && !file.type.startsWith('image/')) {
     error.value = '请选择图片文件';
     return;
   }
@@ -156,13 +171,26 @@ async function handleFile(file: File | null | undefined) {
   busy.value = true;
   error.value = '';
   try {
-    const blob = await processIconImage(file);
+    let blob: Blob;
+    if (svg) {
+      blob =
+        file.type === 'image/svg+xml'
+          ? file
+          : new Blob([file], { type: 'image/svg+xml' });
+      await ensureImageDecodes(blob);
+    } else {
+      blob = await processIconImage(file);
+    }
+    const visibility = await analyzeIconVisibility(blob);
+    if (visibility.whiteOnly && bg.value === DEFAULT_ICON_BG) {
+      bg.value = DARK_ICON_BG;
+    }
     releasePending();
     pendingBlob.value = blob;
     pendingPreview.value = URL.createObjectURL(blob);
     kind.value = 'upload';
   } catch {
-    error.value = '图标处理失败，请换一张图片';
+    error.value = svg ? 'SVG 文件无法解析，请换一个文件' : '图标处理失败，请换一张图片';
   } finally {
     busy.value = false;
   }
@@ -185,6 +213,20 @@ async function submit() {
   if (!normalizedUrl) {
     error.value = '请输入有效的网址（http/https）';
     return;
+  }
+
+  const attemptSiteSvg = kind.value === 'favicon';
+  let siteSvg: SiteSvgIcon | null = null;
+  if (attemptSiteSvg) {
+    // Keep the request synchronous so the click gesture is still active for Chrome.
+    const access = requestSiteAccess();
+    busy.value = true;
+    try {
+      siteSvg = (await access) ? await fetchSiteSvgIcon(normalizedUrl) : null;
+    } finally {
+      busy.value = false;
+    }
+    if (!open.value) return;
   }
 
   let icon: IconSpec;
@@ -223,7 +265,26 @@ async function submit() {
     }
     icon = { kind: 'url', value: normalizedIcon, bg: bg.value };
   } else {
-    icon = { kind: 'favicon', value: '', bg: bg.value };
+    if (siteSvg) {
+      const candidate = siteSvg;
+      busy.value = true;
+      try {
+        icon = {
+          kind: 'upload',
+          value: await saveIconBlob(candidate.blob),
+          bg:
+            candidate.background && bg.value === DEFAULT_ICON_BG
+              ? candidate.background
+              : bg.value,
+        };
+      } catch {
+        icon = { kind: 'favicon', value: '', bg: bg.value };
+      } finally {
+        busy.value = false;
+      }
+    } else {
+      icon = { kind: 'favicon', value: '', bg: bg.value };
+    }
   }
 
   const previousUpload =
@@ -311,7 +372,7 @@ async function submit() {
 
       <div class="source-body">
         <p v-if="kind === 'favicon'" class="hint">
-          从 Chromium 本地图标缓存读取，卡片内居中显示；没有可用图标时显示地球图标。
+          优先解析站点声明的 SVG（首次需一次性授权访问网站），拿不到时回退到浏览器本地图标缓存。
         </p>
 
         <template v-else-if="kind === 'text'">
@@ -362,7 +423,7 @@ async function submit() {
               </span>
               <IconUpload v-else size="24" stroke="1.6" />
               <strong>{{ busy ? '处理中…' : pendingPreview || hasUpload ? '更换图片' : '选择图片' }}</strong>
-              <span>PNG / JPG / WebP，最大 5MB，自动处理为 128px</span>
+              <span>PNG / JPG / WebP / SVG，最大 5MB，SVG 保留矢量</span>
             </button>
             <input
               ref="fileInput"
@@ -417,7 +478,7 @@ async function submit() {
           </span>
           <input v-model="bg" class="color-input" type="color" aria-label="自定义图标底色" />
         </div>
-        <p class="hint">透明背景的图标会铺上这层底色，深色壁纸下也能看清。</p>
+        <p class="hint">透明背景的图标会铺上这层底色；纯白图案会自动改用深色底，随时可以改回来。</p>
       </div>
 
       <p v-if="error" class="error">{{ error }}</p>
@@ -426,7 +487,7 @@ async function submit() {
     <template #footer>
       <button type="button" class="panel-btn" @click="open = false">取消</button>
       <button type="button" class="panel-btn primary" :disabled="busy" @click="submit">
-        {{ mode === 'edit' ? '保存' : '添加' }}
+        {{ busy ? '处理中…' : mode === 'edit' ? '保存' : '添加' }}
       </button>
     </template>
   </DialogShell>

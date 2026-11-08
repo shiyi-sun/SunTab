@@ -8,6 +8,7 @@ import {
 } from '@tabler/icons-vue';
 import IconThumb from '../../components/grid/IconThumb.vue';
 import { APP_NAME, APP_VERSION } from '../../shared/defaults';
+import { saveIconBlob } from '../../shared/iconBlobs';
 import { normalizeHttpUrl } from '../../shared/nav';
 import {
   createQuickAddIcon,
@@ -15,6 +16,7 @@ import {
   isQuickAddableUrl,
   quickAddName,
 } from '../../shared/quickAdd';
+import { fetchSiteSvgIcon } from '../../shared/siteIcon';
 import { loadConfig, loadNav, writeNav } from '../../shared/storage';
 import type { NavGroup, ThemeMode } from '../../shared/types';
 
@@ -148,6 +150,20 @@ async function addToSunTab() {
       name.value,
     );
     if (!item) throw new Error('网址无效');
+    try {
+      const svg = await fetchSiteSvgIcon(normalizedUrl.value, {
+        timeoutMs: 3500,
+      });
+      if (svg) {
+        item.icon = {
+          kind: 'upload',
+          value: await saveIconBlob(svg.blob),
+          ...(svg.background ? { bg: svg.background } : {}),
+        };
+      }
+    } catch {
+      // Keep the browser favicon cache as the fallback.
+    }
     group.items.push(item);
     await writeNav(latest);
     groups.value = latest;

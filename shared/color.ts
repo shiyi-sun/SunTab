@@ -44,6 +44,7 @@ export const ICON_BACKGROUND_PALETTE = [
 ];
 
 export const DEFAULT_ICON_BG = '#ffffff';
+export const DARK_ICON_BG = '#1f1f1f';
 export const TRANSPARENT_ICON_BG = '#00000000';
 
 export function hashString(value: string): number {

@@ -1,7 +1,7 @@
 {
   "name": "suntab",
   "private": true,
-  "version": "0.2.2",
+  "version": "0.2.4",
   "type": "module",
   "description": "SunTab - 本地优先的个人新标签页",
   "packageManager": "pnpm@11.23.0",
@@ -30,13 +30,14 @@
     "@tailwindcss/vite": "^4.3.5",
     "@types/node": "^24.0.0",
     "@wxt-dev/module-vue": "^1.0.3",
+    "jsdom": "^31.0.0",
+    "lunar-typescript": "^1.8.7",
     "tailwindcss": "^4.3.5",
     "typescript": "^5.9.3",
     "vite": "^8.1.5",
     "vitest": "^5.1.0",
     "vue-tsc": "^3.2.5",
     "web-ext": "^10.5.0",
-    "wxt": "^0.21.5",
-    "lunar-typescript": "^1.8.7"
+    "wxt": "^0.21.5"
   }
 }
