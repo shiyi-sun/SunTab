@@ -1,7 +1,7 @@
 import type { AppConfig, NavGroup, SearchEngine } from './types';
 
 export const APP_NAME = 'SunTab';
-export const APP_VERSION = '0.2.9';
+export const APP_VERSION = '0.2.10';
 export const SCHEMA_VERSION = 1 as const;
 
 export const STORAGE_KEYS = {

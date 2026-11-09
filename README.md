@@ -2,7 +2,7 @@
 
 **A quiet, local-first new tab page for Chromium.** SunTab replaces the new tab with a wallpaper, a clock, a search bar, and a small desktop of the sites you actually use. No account, no cloud sync, no telemetry, and no remote component store.
 
-Version **0.2.9** · [简体中文](./README.zh-CN.md)
+Version **0.2.10** · [简体中文](./README.zh-CN.md)
 
 ## Why SunTab
 
@@ -30,7 +30,7 @@ Most new tab pages want to be a portal. SunTab tries to be a desk: one calm back
 ### Icon desktop
 
 - Tiles from 36–120 px (50 px by default), with adjustable gap, corner radius, label size, label color, and maximum grid width.
-- Icon sources: an automatically resolved site SVG (favicon, manifest, or header brand image; horizontal brand images use only the independent mark), a text initial with a color, an uploaded image, or an image URL. When no SVG is available, the text initial is used instead of saving a low-resolution bitmap.
+- Icon sources: an automatically resolved site icon (SVG first; then declared PNG / WebP of at least 96px; then a header brand image, preferring the independent mark and keeping the whole image when no mark can be separated), a text initial with a color, an uploaded image, or an image URL. Automatic bitmaps are stored as 128px WebP; when no high-resolution icon exists, the browser's cached site icon is used, then the text initial.
 - Image icons use a white backdrop by default. Edge detection keeps transparent artwork at 80% with even padding and lets full-bleed images fill the tile; white-only artwork switches to a dark backdrop (the site's theme-color when dark enough). The backdrop can be changed or removed for each icon.
 - Folders, groups, drag-to-reorder, and context menus for icons, folders, groups, and empty space.
 - Drag sorting uses a clean drop line that stays in the gap nearest the pointer. Light wallpaper cards keep a hairline and a soft shadow; dark wallpaper cards use the soft shadow only.
@@ -46,13 +46,13 @@ Most new tab pages want to be a portal. SunTab tries to be a desk: one calm back
 
 - Pin SunTab to the toolbar and click it on any normal web page, or press `Alt+Shift+S`.
 - Choose a group and save. The popup confirms and closes itself, and duplicate URLs are detected.
-- Quick add tries to read the page's site icon. If no SVG is available, it saves a text initial, shows a short notice, and does not ask for site access.
+- Quick add tries to read the page's site icon. When site access is already granted, it prefers the icons and header logos already rendered in the page; without site access it uses the browser's cached site icon and never shows an extra site-access prompt.
 
 ### Settings and data
 
 - Settings open in a side drawer, so wallpaper changes preview live.
 - Sections: Appearance, Wallpaper, Search, Icons, Clock, Layout, Sidebar, Data, and About.
-- JSON export and import include settings, groups, folders, and icon images (uploaded or automatically fetched SVG). Wallpaper images are not included.
+- JSON export and import include settings, groups, folders, and icon images (uploaded, or automatically fetched SVG / WebP). Wallpaper images are not included.
 - Import shows a preview and downloads a backup of the current data first.
 - Import restores only uploaded icons referenced by the new navigation and removes old icon records that are no longer referenced.
 - “Restore default settings” resets appearance, search, icons, clock, layout, and sidebar, but keeps icons and groups.
@@ -74,16 +74,16 @@ SunTab runs in Chrome, Chromium, and Microsoft Edge. Releases contain a Chrome/C
 
 ### Chrome / Chromium
 
-1. Download `SunTab-0.2.9-chrome.zip` from the [GitHub Releases](https://github.com/shiyi-sun/SunTab/releases) or [AtomGit Releases](https://atomgit.com/shiyi-sun/SunTab/releases) page.
-2. Unzip it into a permanent folder, for example `D:\SunTab\0.2.9`.
+1. Download `SunTab-0.2.10-chrome.zip` from the [GitHub Releases](https://github.com/shiyi-sun/SunTab/releases) or [AtomGit Releases](https://atomgit.com/shiyi-sun/SunTab/releases) page.
+2. Unzip it into a permanent folder, for example `D:\SunTab\0.2.10`.
 3. Open `chrome://extensions` and turn on **Developer mode**.
 4. Click **Load unpacked** and select the extracted `SunTab` folder.
 5. Open a new tab.
 
 ### Microsoft Edge
 
-1. Download `SunTab-0.2.9-edge.zip` from Releases.
-2. Unzip it into a permanent folder, for example `D:\SunTab\0.2.9-edge`.
+1. Download `SunTab-0.2.10-edge.zip` from Releases.
+2. Unzip it into a permanent folder, for example `D:\SunTab\0.2.10-edge`.
 3. Open `edge://extensions` and turn on **Developer mode**.
 4. Click **Load unpacked** and select the extracted `SunTab` folder.
 5. Open a new tab.
@@ -107,24 +107,25 @@ Then load `.output/chrome-mv3` as an unpacked extension. For development, `pnpm 
 | --- | --- |
 | `storage` | Save settings and navigation in `chrome.storage.local` |
 | `unlimitedStorage` | Store uploaded icons and wallpapers in IndexedDB |
-| `favicon` | Read the browser's local icon cache for the quick-add preview; legacy favicon icons also use this cache |
+| `favicon` | Read the browser's local icon cache for the quick-add preview, automatic fallback, and legacy favicon icons |
 | `activeTab` | Read the current page title and URL when you open quick add |
-| `https://*/*`, `http://*/*` (optional) | Read a site's page and download its SVG when you add an automatic icon; download the daily wallpaper after you enable Bing daily |
+| `scripting` | Read the icons and header logos already rendered in the current page during quick add; only active after an extension click or shortcut |
+| `https://*/*`, `http://*/*` (optional) | Read a site's page and download its SVG / high-resolution icons when you add an automatic icon; download the daily wallpaper after you enable Bing daily |
 
-Site access is requested once when you create or edit an automatic icon and then applies to all sites; quick add does not show a site-access prompt and uses a text initial when no SVG is available. The Bing permission is requested when you enable daily wallpaper. Both can be revoked at any time in the browser settings.
+Site access is requested once when you create or edit an automatic icon and then applies to all sites. Quick add never shows a site-access prompt: with access it uses the icons and header logos already rendered in the current tab, and without access it uses the browser's cached site icon. Reading a page reuses the browser's existing session for that site so login-only pages can still be resolved. The Bing permission is requested when you enable daily wallpaper. Both can be revoked at any time in the browser settings.
 
 ## Privacy
 
 SunTab is local-first. Settings and navigation live in `chrome.storage.local`, uploaded images live in IndexedDB, and a small first-paint snapshot lives in `localStorage`. SunTab has no analytics, no accounts, and no background network requests.
 
-SunTab contacts the network only when you enable Bing daily wallpaper, or when you add an automatic icon and read a site's page. Searches and icon links navigate only to the sites you choose. Automatic icons use a text initial when no SVG is available or access is not granted.
+SunTab contacts the network only when you enable Bing daily wallpaper, or when you add an automatic icon and read a site's page (reusing the browser's existing session for that site). Searches and icon links navigate only to the sites you choose. Automatic icons use the browser's cached site icon when no high-resolution icon is available or access is not granted, then the text initial if no cached icon exists.
 
 ## Good to know
 
 - Chrome, Chromium, and Microsoft Edge on Manifest V3. Firefox is not supported.
 - The interface is currently in Simplified Chinese.
 - JSON backups include uploaded icon images but not wallpaper images. Wallpapers are device-local.
-- Automatic icons first read the site's declared SVG and store it locally as a vector, skipping blank or solid-white images and giving white-only artwork a dark backdrop. When no usable SVG is available, access is not granted, or fetching fails, SunTab uses a text initial.
+- Automatic icons resolve in this order: declared SVG → declared PNG / WebP of at least 96px → header brand image (preferring the independent mark) → mask SVG → the browser's cached site icon → text initial. SVG stays vector and bitmaps become 128px WebP; both are stored locally and included in JSON backups. Blank or solid-white images are skipped, and white-only artwork gets a dark backdrop.
 - Uploaded and Bing wallpapers use light text. Very bright images may need a higher dim value for comfortable contrast.
 - The last selected group is not remembered across reloads; SunTab returns to the first group.
 - Web search suggestions, search history, bookmarks/history import, cloud sync, and a component store are intentionally out of scope.

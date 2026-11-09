@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { IconWorld } from '@tabler/icons-vue';
 import {
   DEFAULT_ICON_BG,
   getIconColor,
@@ -127,8 +126,12 @@ const textStyle = computed(() => {
         : longest > 1
           ? '40cqw'
           : '52cqw';
+  const bg = props.icon.bg;
   return {
-    background: props.icon.bg || getIconColor(props.name),
+    background:
+      bg && bg !== DEFAULT_ICON_BG && bg !== TRANSPARENT_ICON_BG
+        ? bg
+        : getIconColor(props.name),
     fontSize,
   };
 });
@@ -177,15 +180,12 @@ watch(
       @load="onImageLoad"
       @error="failed = true"
     />
-    <span v-else-if="icon.kind === 'text'" class="thumb-text" :style="textStyle">
+    <span v-else-if="!loadingUpload" class="thumb-text" :style="textStyle">
       <span
         v-for="(line, index) in textLines"
         :key="index"
         class="thumb-text-line"
       >{{ line }}</span>
-    </span>
-    <span v-else-if="!loadingUpload" class="thumb-globe" aria-hidden="true">
-      <IconWorld size="20" stroke="1.6" />
     </span>
   </span>
 </template>
@@ -231,21 +231,5 @@ watch(
 .thumb-text-line {
   display: block;
   white-space: nowrap;
-}
-
-.thumb-globe {
-  display: grid;
-  width: 70cqw;
-  height: 70cqw;
-  max-width: 20px;
-  max-height: 20px;
-  color: currentColor;
-  opacity: 0.62;
-  place-items: center;
-}
-
-.thumb-globe :deep(svg) {
-  width: 100%;
-  height: 100%;
 }
 </style>

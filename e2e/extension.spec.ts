@@ -342,12 +342,14 @@ test('moves an existing paper default to night after the update', async ({ newta
   ).toBe('1');
 });
 
-test('uses a text initial when no SVG is available', async ({ newtab }) => {
+test('falls back to the browser favicon when no site icon is available', async ({
+  newtab,
+}) => {
   await addIcon(newtab, '无缓存图标', 'https://no-cached-icon.example');
   const tile = newtab.locator('.icon-tile[title="无缓存图标"]');
-  await expect(tile.locator('.thumb-text')).toBeVisible();
-  await expect(tile.locator('.thumb-globe')).toHaveCount(0);
-  await expect(tile.locator('.thumb-img')).toHaveCount(0);
+  await expect(
+    tile.locator('.thumb-img').or(tile.locator('.thumb-text')),
+  ).toBeVisible();
 });
 
 test('renders the favicon inside the tile with padding', async ({ newtab }) => {
@@ -1326,7 +1328,7 @@ test('popup adds the current page and rejects duplicates', async ({
   await popup.getByRole('button', { name: '添加到 SunTab' }).click();
   await expect(popup.locator('.saved')).toContainText('已添加');
   await expect(popup.locator('.saved')).toContainText('主页');
-  await expect(popup.locator('.saved-fallback')).toContainText('没抓到网站图标');
+  await expect(popup.locator('.saved-fallback')).toContainText('没抓到高清图标');
 
   await newtab.reload();
   await expect(newtab.locator('.clock')).toBeVisible();

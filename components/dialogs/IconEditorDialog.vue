@@ -7,7 +7,6 @@ import {
   DARK_ICON_BG,
   DEFAULT_ICON_BG,
   getIconColor,
-  getIconInitial,
   ICON_BACKGROUND_PALETTE,
   TEXT_ICON_PALETTE,
   TRANSPARENT_ICON_BG,
@@ -19,9 +18,9 @@ import {
   processIconImage,
 } from '../../shared/image';
 import {
-  fetchSiteSvgIcon,
+  fetchSiteIcon,
   requestSiteAccess,
-  type SiteSvgIcon,
+  type SiteIcon,
 } from '../../shared/siteIcon';
 import {
   clampIconText,
@@ -223,14 +222,14 @@ async function submit() {
     return;
   }
 
-  const attemptSiteSvg = kind.value === 'favicon';
-  let siteSvg: SiteSvgIcon | null = null;
-  if (attemptSiteSvg) {
+  const attemptSiteIcon = kind.value === 'favicon';
+  let siteIcon: SiteIcon | null = null;
+  if (attemptSiteIcon) {
     // Keep the request synchronous so the click gesture is still active for Chrome.
     const access = requestSiteAccess();
     busy.value = true;
     try {
-      siteSvg = (await access) ? await fetchSiteSvgIcon(normalizedUrl) : null;
+      siteIcon = (await access) ? await fetchSiteIcon(normalizedUrl) : null;
     } finally {
       busy.value = false;
     }
@@ -273,8 +272,8 @@ async function submit() {
     }
     icon = { kind: 'url', value: normalizedIcon, bg: bg.value };
   } else {
-    if (siteSvg) {
-      const candidate = siteSvg;
+    if (siteIcon) {
+      const candidate = siteIcon;
       busy.value = true;
       try {
         icon = {
@@ -291,17 +290,7 @@ async function submit() {
         busy.value = false;
       }
     } else {
-      const textBg =
-        bg.value &&
-        bg.value !== DEFAULT_ICON_BG &&
-        bg.value !== TRANSPARENT_ICON_BG
-          ? bg.value
-          : getIconColor(cleanName);
-      icon = {
-        kind: 'text',
-        value: getIconInitial(cleanName),
-        bg: textBg,
-      };
+      icon = { kind: 'favicon', value: '', bg: bg.value };
     }
   }
 
@@ -390,8 +379,8 @@ async function submit() {
 
       <div class="source-body">
         <p v-if="kind === 'favicon'" class="hint">
-          优先解析站点声明的 SVG（首次需一次性授权访问网站）；横向品牌图只取独立标志。
-          找不到 SVG 时使用文字首字，不保存低清位图。
+          优先解析站点声明的 SVG 和高清图标（首次需一次性授权访问网站）；页头品牌图优先裁出独立标志。
+          都找不到时使用浏览器缓存的网站图标，再退到文字首字。
         </p>
 
         <template v-else-if="kind === 'text'">

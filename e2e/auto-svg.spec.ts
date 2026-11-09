@@ -3,6 +3,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
+import { deflateSync } from 'node:zlib';
 import {
   chromium,
   expect,
@@ -38,6 +39,101 @@ const BRAND_INTEGRATED_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80"><circle cx="40" cy="40" r="38" fill="#3b78c9"/><text x="40" y="46" text-anchor="middle" font-family="sans-serif" font-size="12" fill="#ffd166">Brand</text></svg>';
 const BRAND_WORDMARK_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 40"><text x="0" y="30" font-family="sans-serif" font-size="28" fill="#222222">BrandName</text></svg>';
+
+const CRC_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let index = 0; index < 256; index += 1) {
+    let value = index;
+    for (let bit = 0; bit < 8; bit += 1) {
+      value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+    }
+    table[index] = value >>> 0;
+  }
+  return table;
+})();
+
+function crc32(data: Buffer): number {
+  let crc = 0xffffffff;
+  for (const byte of data) {
+    crc = CRC_TABLE[(crc ^ byte) & 0xff]! ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function pngChunk(type: string, data: Buffer): Buffer {
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(data.length);
+  const name = Buffer.from(type, 'ascii');
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(Buffer.concat([name, data])));
+  return Buffer.concat([length, name, data, crc]);
+}
+
+function makePng(
+  width: number,
+  height: number,
+  pixel: (x: number, y: number) => [number, number, number, number],
+): Buffer {
+  const stride = width * 4 + 1;
+  const rows = Buffer.alloc(stride * height);
+  for (let y = 0; y < height; y += 1) {
+    const row = y * stride;
+    for (let x = 0; x < width; x += 1) {
+      const [red, green, blue, alpha] = pixel(x, y);
+      const offset = row + 1 + x * 4;
+      rows[offset] = red;
+      rows[offset + 1] = green;
+      rows[offset + 2] = blue;
+      rows[offset + 3] = alpha;
+    }
+  }
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header[8] = 8;
+  header[9] = 6;
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    pngChunk('IHDR', header),
+    pngChunk('IDAT', deflateSync(rows)),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ]);
+}
+
+const RASTER_ICON = makePng(192, 192, (x, y) => {
+  const dx = x - 96;
+  const dy = y - 96;
+  return dx * dx + dy * dy <= 78 * 78
+    ? [22, 155, 98, 255]
+    : [0, 0, 0, 0];
+});
+
+const BRAND_RASTER = makePng(242, 150, (x, y) => {
+  const dx = x - 46;
+  const dy = y - 68;
+  if (dx * dx + dy * dy <= 32 * 32) return [200, 40, 50, 255];
+  const inText =
+    y >= 20 &&
+    y <= 119 &&
+    ((x >= 100 && x <= 129) ||
+      (x >= 140 && x <= 189) ||
+      (x >= 200 && x <= 229));
+  return inText ? [30, 90, 200, 255] : [0, 0, 0, 0];
+});
+
+const WIDE_BANNER = makePng(600, 100, (x, y) =>
+  x >= 10 && x <= 589 && y >= 10 && y <= 89
+    ? [200, 40, 50, 255]
+    : [0, 0, 0, 0],
+);
+
+const TINY_RASTER = makePng(32, 32, (x, y) => {
+  const dx = x - 16;
+  const dy = y - 16;
+  return dx * dx + dy * dy <= 14 * 14
+    ? [22, 155, 98, 255]
+    : [0, 0, 0, 0];
+});
 
 let server: http.Server;
 let base = '';
@@ -77,6 +173,17 @@ test.beforeAll(async () => {
     if (brandSvgs[url]) {
       response.setHeader('Content-Type', 'image/svg+xml');
       response.end(brandSvgs[url]);
+      return;
+    }
+    const rasterAssets: Record<string, Buffer> = {
+      '/touch.png': RASTER_ICON,
+      '/brand-raster.png': BRAND_RASTER,
+      '/wide-banner.png': WIDE_BANNER,
+      '/tiny.png': TINY_RASTER,
+    };
+    if (rasterAssets[url]) {
+      response.setHeader('Content-Type', 'image/png');
+      response.end(rasterAssets[url]);
       return;
     }
     if (url === '/app.webmanifest') {
@@ -138,6 +245,30 @@ test.beforeAll(async () => {
     if (brandPages[url]) {
       response.end(
         `<!doctype html><title>brand</title><header><a class="logo" href="/"><img src="${brandPages[url]}" alt="品牌"></a></header><h1>brand</h1>`,
+      );
+      return;
+    }
+    if (url === '/raster') {
+      response.end(
+        '<!doctype html><title>raster icon</title><link rel="apple-touch-icon" href="/touch.png"><h1>raster</h1>',
+      );
+      return;
+    }
+    if (url === '/brand-raster' || url === '/brand-raster-hint') {
+      response.end(
+        '<!doctype html><title>brand raster</title><header><a class="logo" href="/"><img src="/brand-raster.png" alt="品牌"></a></header><h1>brand</h1>',
+      );
+      return;
+    }
+    if (url === '/wide-banner') {
+      response.end(
+        '<!doctype html><title>wide banner</title><header><a class="logo" href="/"><img src="/wide-banner.png" alt="品牌"></a></header><h1>banner</h1>',
+      );
+      return;
+    }
+    if (url === '/tiny-raster') {
+      response.end(
+        '<!doctype html><title>tiny raster</title><link rel="icon" type="image/png" sizes="32x32" href="/tiny.png"><h1>tiny</h1>',
       );
       return;
     }
@@ -250,6 +381,65 @@ async function readIconSvg(page: Page, id: string): Promise<string> {
   );
 }
 
+async function readIconPixels(
+  page: Page,
+  id: string,
+): Promise<{ red: number; blue: number }> {
+  return page.evaluate(
+    (blobId) =>
+      new Promise<{ red: number; blue: number }>((resolve, reject) => {
+        const request = indexedDB.open('suntab');
+        request.onsuccess = () => {
+          const db = request.result;
+          if (!db.objectStoreNames.contains('icons')) {
+            resolve({ red: 0, blue: 0 });
+            return;
+          }
+          const get = db
+            .transaction('icons', 'readonly')
+            .objectStore('icons')
+            .get(blobId);
+          get.onsuccess = async () => {
+            const record = get.result as { blob?: Blob } | undefined;
+            if (!record?.blob) {
+              resolve({ red: 0, blue: 0 });
+              return;
+            }
+            try {
+              const bitmap = await createImageBitmap(record.blob);
+              const canvas = document.createElement('canvas');
+              canvas.width = 128;
+              canvas.height = 128;
+              const context = canvas.getContext('2d', {
+                willReadFrequently: true,
+              });
+              if (!context) {
+                resolve({ red: 0, blue: 0 });
+                return;
+              }
+              context.drawImage(bitmap, 0, 0, 128, 128);
+              bitmap.close();
+              const data = context.getImageData(0, 0, 128, 128).data;
+              let red = 0;
+              let blue = 0;
+              for (let index = 0; index < data.length; index += 4) {
+                if (data[index + 3]! < 20) continue;
+                if (data[index]! > 150 && data[index + 2]! < 100) red += 1;
+                if (data[index + 2]! > 150 && data[index]! < 100) blue += 1;
+              }
+              resolve({ red, blue });
+            } catch (error) {
+              reject(error);
+            }
+          };
+          get.onerror = () => reject(get.error);
+        };
+        request.onerror = () => reject(request.error);
+      }),
+    id,
+  );
+}
+
 async function thumbBackground(page: Page, name: string): Promise<string> {
   return page
     .locator(`.icon-tile[title="${name}"] .thumb`)
@@ -315,6 +505,12 @@ test('automatic icons resolve site svg from link, manifest and fall back', async
     await addIcon(page, '品牌下标志', `${base}/brand-stack-reverse`);
     await addIcon(page, '品牌整体', `${base}/brand-integrated`);
     await addIcon(page, '纯文字品牌', `${base}/brand-wordmark`);
+    const rasterImg = await addIcon(page, '声明位图', `${base}/raster`);
+    await expect(rasterImg).toHaveAttribute('src', /^blob:/);
+    const brandRasterImg = await addIcon(page, '品牌位图', `${base}/brand-raster`);
+    await expect(brandRasterImg).toHaveAttribute('src', /^blob:/);
+    await addIcon(page, '宽横幅', `${base}/wide-banner`);
+    await addIcon(page, '小位图', `${base}/tiny-raster`);
 
     const whiteThemeImg = await addIcon(
       page,
@@ -333,17 +529,21 @@ test('automatic icons resolve site svg from link, manifest and fall back', async
     const blankImg = await addIcon(page, '空白优先', `${base}/blank-first`);
     await expect(blankImg).toHaveAttribute('src', /^blob:/);
 
-    await expect.poll(async () => (await readNav(page)).length).toBe(13);
+    await expect.poll(async () => (await readNav(page)).length).toBe(17);
     const nav = await readNav(page);
     expect(nav.find((item) => item.name === '链接 SVG')?.kind).toBe('upload');
     expect(nav.find((item) => item.name === '清单 SVG')?.kind).toBe('upload');
-    expect(nav.find((item) => item.name === '无 SVG')?.kind).toBe('text');
+    expect(nav.find((item) => item.name === '无 SVG')?.kind).toBe('favicon');
     expect(nav.find((item) => item.name === '品牌裁标志')?.kind).toBe('upload');
     expect(nav.find((item) => item.name === '品牌右标志')?.kind).toBe('upload');
     expect(nav.find((item) => item.name === '品牌上标志')?.kind).toBe('upload');
     expect(nav.find((item) => item.name === '品牌下标志')?.kind).toBe('upload');
     expect(nav.find((item) => item.name === '品牌整体')?.kind).toBe('upload');
-    expect(nav.find((item) => item.name === '纯文字品牌')?.kind).toBe('text');
+    expect(nav.find((item) => item.name === '纯文字品牌')?.kind).toBe('favicon');
+    expect(nav.find((item) => item.name === '声明位图')?.kind).toBe('upload');
+    expect(nav.find((item) => item.name === '品牌位图')?.kind).toBe('upload');
+    expect(nav.find((item) => item.name === '宽横幅')?.kind).toBe('favicon');
+    expect(nav.find((item) => item.name === '小位图')?.kind).toBe('favicon');
     expect(nav.find((item) => item.name === '白色主题色')?.bg).toBe('#102030');
     expect(nav.find((item) => item.name === '白色无主题')?.bg).toBe('#1f1f1f');
     expect(nav.find((item) => item.name === 'mask 顺序')?.bg).toBe('#ffffff');
@@ -363,15 +563,17 @@ test('automatic icons resolve site svg from link, manifest and fall back', async
     expect(integratedSvg).toContain('Brand');
     expect(integratedSvg).toContain('0 0 80 80');
 
-    await expect(
-      page.locator('.icon-tile[title="纯文字品牌"] .thumb-text'),
-    ).toBeVisible();
-    await expect(
-      page.locator('.icon-tile[title="无 SVG"] .thumb-text'),
-    ).toBeVisible();
-    await expect(
-      page.locator('.icon-tile[title="无 SVG"] .thumb-globe'),
-    ).toHaveCount(0);
+    for (const name of ['纯文字品牌', '无 SVG']) {
+      const tile = page.locator(`.icon-tile[title="${name}"]`);
+      await expect(
+        tile.locator('.thumb-img').or(tile.locator('.thumb-text')),
+      ).toBeVisible();
+    }
+
+    const brandRaster = nav.find((item) => item.name === '品牌位图');
+    const pixels = await readIconPixels(page, brandRaster?.value ?? '');
+    expect(pixels.red).toBeGreaterThan(100);
+    expect(pixels.blue).toBe(0);
 
     await expect
       .poll(() => thumbBackground(page, '白色主题色'))
@@ -387,14 +589,12 @@ test('automatic icons resolve site svg from link, manifest and fall back', async
       .toBe('rgb(255, 255, 255)');
 
     const icons = await readIcons(page);
-    expect(
-      icons.some(
-        (icon) => icon.type === 'image/svg+xml' && icon.text.includes('<svg'),
-      ),
-    ).toBe(true);
-    expect(icons.every((icon) => icon.type === 'image/svg+xml')).toBe(true);
-    expect(icons.filter((icon) => icon.text.includes('#ffffff')).length).toBe(2);
-    expect(icons.filter((icon) => icon.text.includes('#169b62')).length).toBe(2);
+    const svgIcons = icons.filter((icon) => icon.type === 'image/svg+xml');
+    const webpIcons = icons.filter((icon) => icon.type === 'image/webp');
+    expect(svgIcons.some((icon) => icon.text.includes('<svg'))).toBe(true);
+    expect(webpIcons).toHaveLength(2);
+    expect(svgIcons.filter((icon) => icon.text.includes('#ffffff')).length).toBe(2);
+    expect(svgIcons.filter((icon) => icon.text.includes('#169b62')).length).toBe(2);
 
     const popup = await context.newPage();
     await popup.addInitScript(
@@ -427,11 +627,59 @@ test('automatic icons resolve site svg from link, manifest and fall back', async
     await popup.getByRole('button', { name: '添加到 SunTab' }).click();
     await expect(popup.locator('.saved')).toContainText('已添加');
 
-    await expect.poll(async () => (await readNav(page)).length).toBe(14);
+    await expect.poll(async () => (await readNav(page)).length).toBe(18);
     const navAfterPopup = await readNav(page);
     expect(
       navAfterPopup.find((item) => item.name === '快速添加 SVG')?.kind,
     ).toBe('upload');
+
+    const source = await context.newPage();
+    await source.goto(`${base}/brand-raster-hint`);
+    const hintedPopup = await context.newPage();
+    await hintedPopup.addInitScript(
+      ({ url, title }) => {
+        const api = (
+          globalThis as unknown as {
+            chrome?: {
+              tabs?: {
+                query(
+                  info: { active?: boolean },
+                  callback: (tabs: Array<Record<string, unknown>>) => void,
+                ): void;
+              };
+            };
+          }
+        ).chrome;
+        if (!api?.tabs) return;
+        const original = api.tabs.query.bind(api.tabs);
+        api.tabs.query = (info, callback) => {
+          if (!info?.active) {
+            original(info, callback);
+            return;
+          }
+          original({}, (tabs) => {
+            const target = tabs.find((tab) => tab.url === url);
+            callback([target ? { ...target, title } : { id: 999, url, title }]);
+          });
+        };
+      },
+      { url: `${base}/brand-raster-hint`, title: '快速添加品牌位图' },
+    );
+    await hintedPopup.goto(`chrome-extension://${EXTENSION_ID}/popup.html`);
+    await expect(hintedPopup.locator('.quick-form')).toBeVisible();
+    await hintedPopup.getByRole('button', { name: '添加到 SunTab' }).click();
+    await expect(hintedPopup.locator('.saved')).toContainText('已添加');
+    await expect(hintedPopup.locator('.saved-fallback')).toHaveCount(0);
+
+    await expect.poll(async () => (await readNav(page)).length).toBe(19);
+    const navAfterHints = await readNav(page);
+    const hintedItem = navAfterHints.find(
+      (item) => item.name === '快速添加品牌位图',
+    );
+    expect(hintedItem?.kind).toBe('upload');
+    const hintedPixels = await readIconPixels(page, hintedItem?.value ?? '');
+    expect(hintedPixels.red).toBeGreaterThan(100);
+    expect(hintedPixels.blue).toBe(0);
   } finally {
     await context?.close();
     try {

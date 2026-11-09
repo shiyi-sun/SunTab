@@ -7,7 +7,6 @@ import {
   IconX,
 } from '@tabler/icons-vue';
 import IconThumb from '../../components/grid/IconThumb.vue';
-import { getIconColor, getIconInitial } from '../../shared/color';
 import { APP_NAME, APP_VERSION } from '../../shared/defaults';
 import { saveIconBlob } from '../../shared/iconBlobs';
 import { normalizeHttpUrl } from '../../shared/nav';
@@ -17,11 +16,17 @@ import {
   isQuickAddableUrl,
   quickAddName,
 } from '../../shared/quickAdd';
-import { fetchSiteSvgIcon } from '../../shared/siteIcon';
+import {
+  collectPageIconHints,
+  fetchSiteIcon,
+  hasSiteAccess,
+  type PageIconHints,
+} from '../../shared/siteIcon';
 import { loadConfig, loadNav, writeNav } from '../../shared/storage';
 import type { NavGroup, ThemeMode } from '../../shared/types';
 
 interface ChromeTab {
+  id?: number;
   url?: string;
   title?: string;
 }
@@ -33,8 +38,46 @@ interface ChromeTabsApi {
   ): void;
 }
 
+interface ChromeScriptingApi {
+  executeScript<T>(
+    details: { target: { tabId: number }; func: () => T },
+    callback: (results?: Array<{ result?: T }>) => void,
+  ): void;
+}
+
 function chromeTabs(): ChromeTabsApi | undefined {
   return (globalThis as unknown as { chrome?: { tabs?: ChromeTabsApi } }).chrome?.tabs;
+}
+
+function chromeScripting(): ChromeScriptingApi | undefined {
+  return (
+    globalThis as unknown as { chrome?: { scripting?: ChromeScriptingApi } }
+  ).chrome?.scripting;
+}
+
+function readPageHints(tabId: number | undefined): Promise<PageIconHints | null> {
+  return new Promise((resolve) => {
+    const scripting = chromeScripting();
+    if (!scripting?.executeScript || tabId === undefined) {
+      resolve(null);
+      return;
+    }
+    let settled = false;
+    const finish = (hints: PageIconHints | null) => {
+      if (settled) return;
+      settled = true;
+      resolve(hints);
+    };
+    try {
+      scripting.executeScript(
+        { target: { tabId }, func: collectPageIconHints },
+        (results) => finish(results?.[0]?.result ?? null),
+      );
+    } catch {
+      finish(null);
+    }
+    window.setTimeout(() => finish(null), 900);
+  });
 }
 
 function readActiveTab(): Promise<ChromeTab | null> {
@@ -153,25 +196,22 @@ async function addToSunTab() {
     );
     if (!item) throw new Error('网址无效');
     try {
-      const svg = await fetchSiteSvgIcon(normalizedUrl.value, {
-        timeoutMs: 3500,
-      });
-      if (svg) {
-        item.icon = {
-          kind: 'upload',
-          value: await saveIconBlob(svg.blob),
-          ...(svg.background ? { bg: svg.background } : {}),
-        };
+      if (await hasSiteAccess()) {
+        const hints = await readPageHints(tab.value?.id);
+        const siteIcon = await fetchSiteIcon(normalizedUrl.value, {
+          timeoutMs: 3500,
+          hints,
+        });
+        if (siteIcon) {
+          item.icon = {
+            kind: 'upload',
+            value: await saveIconBlob(siteIcon.blob),
+            ...(siteIcon.background ? { bg: siteIcon.background } : {}),
+          };
+        }
       }
     } catch {
-      // Fall through to the text initial below.
-    }
-    if (item.icon.kind !== 'upload') {
-      item.icon = {
-        kind: 'text',
-        value: getIconInitial(item.name),
-        bg: getIconColor(item.name),
-      };
+      // Keep the browser's cached favicon when the site cannot be resolved.
     }
     group.items.push(item);
     await writeNav(latest);
@@ -227,7 +267,7 @@ onBeforeUnmount(() => {
         「{{ savedName }}」已保存到「{{ savedGroupName }}」。
       </p>
       <p v-if="savedIconFallback" class="saved-fallback">
-        没抓到网站图标，已用文字首字代替。
+        没抓到高清图标，已回退到网站图标或文字首字。
       </p>
       <p class="auto-close">窗口即将自动关闭…</p>
     </section>

@@ -1,9 +1,14 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 import {
+  documentFromHints,
+  extractBrandRasterCandidates,
   extractManifestUrl,
+  extractRasterIconCandidates,
   extractSvgIconCandidates,
   extractThemeColor,
+  hasSiteAccess,
+  parseManifestRasterIcons,
   parseManifestSvgIcons,
   requestSiteAccess,
 } from '../shared/siteIcon';
@@ -81,6 +86,109 @@ describe('site svg icon discovery', () => {
       'https://example.com/icons/large.svg',
       'https://cdn.example.com/x.svg?x=1',
     ]);
+  });
+
+  it('finds declared high-resolution raster icons and ignores ico and svg', () => {
+    const html = `
+      <link rel="apple-touch-icon" href="/touch.png">
+      <link rel="icon" type="image/png" sizes="32x32" href="/icon-32.png">
+      <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+      <link rel="icon" href="/favicon.ico">
+      <link rel="icon" type="image/svg+xml" href="/icon.svg">
+      <link rel="mask-icon" href="/mask.png">
+    `;
+    expect(extractRasterIconCandidates(html, 'https://example.com/')).toEqual([
+      'https://example.com/icon-192.png',
+      'https://example.com/touch.png',
+      'https://example.com/icon-32.png',
+    ]);
+  });
+
+  it('reads raster icons from the manifest and drops tiny declared sizes', () => {
+    const manifest = JSON.stringify({
+      icons: [
+        { src: '/m192.png', type: 'image/png', sizes: '192x192' },
+        { src: '/m48.png', type: 'image/png', sizes: '48x48' },
+        { src: '/m.webp', type: 'image/webp', sizes: '512x512' },
+        { src: '/m.svg', type: 'image/svg+xml', sizes: 'any' },
+        { src: '/m.ico', type: 'image/x-icon' },
+        { src: '/m-no-size.png', type: 'image/png' },
+      ],
+    });
+    expect(
+      parseManifestRasterIcons(manifest, 'https://example.com/site.webmanifest'),
+    ).toEqual([
+      'https://example.com/m.webp',
+      'https://example.com/m192.png',
+      'https://example.com/m-no-size.png',
+    ]);
+  });
+
+  it('only takes brand rasters from logo context, not page content', () => {
+    const html = `
+      <header><a class="logo"><img src="/brand-lockup.png" alt="品牌"></a></header>
+      <header><a class="home"><img src="/banner.jpg" alt="品牌"></a></header>
+      <main><img src="/content-logo.png" alt="logo"></main>
+    `;
+    expect(
+      extractBrandRasterCandidates(html, 'https://example.com/'),
+    ).toEqual(['https://example.com/brand-lockup.png']);
+  });
+
+  it('rebuilds a page document from active-tab hints', () => {
+    const doc = documentFromHints(
+      {
+        themeColor: '#102030',
+        links: [
+          {
+            rel: 'icon',
+            type: 'image/png',
+            sizes: '192x192',
+            href: 'https://example.com/icon.png',
+            media: '',
+          },
+        ],
+        brandImages: [
+          {
+            src: 'https://example.com/logo.png',
+            className: 'left',
+            id: '',
+            alt: '品牌',
+            contextClass: 'logo',
+            contextId: '',
+          },
+        ],
+      },
+      'https://example.com/page',
+    );
+    expect(doc.querySelector('base')?.getAttribute('href')).toBe(
+      'https://example.com/page',
+    );
+    expect(
+      doc.querySelector('meta[name="theme-color"]')?.getAttribute('content'),
+    ).toBe('#102030');
+    expect(doc.querySelector('link[rel="icon"]')?.getAttribute('href')).toBe(
+      'https://example.com/icon.png',
+    );
+    expect(doc.querySelector('header a.logo img')?.getAttribute('src')).toBe(
+      'https://example.com/logo.png',
+    );
+  });
+
+  it('reports whether all-site access is already granted', async () => {
+    const contains = vi.fn(
+      (
+        _details: { origins: string[] },
+        callback: (granted: boolean) => void,
+      ) => callback(true),
+    );
+    vi.stubGlobal('chrome', { permissions: { contains } });
+    await expect(hasSiteAccess()).resolves.toBe(true);
+    expect(contains.mock.calls[0]?.[0].origins).toEqual([
+      'https://*/*',
+      'http://*/*',
+    ]);
+    vi.unstubAllGlobals();
   });
 
   it('requests all-site access once so later icons do not prompt again', async () => {
