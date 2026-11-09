@@ -4,7 +4,8 @@ import {
   type AlphaMask,
   type RasterBox,
 } from './brandRaster';
-import { prepareBrandSvg } from './brandSvg';
+import { prepareBrandSvg, sanitizeSvgText } from './brandSvg';
+import { stripInlineHandlers } from './markup';
 import { DARK_ICON_BG } from './color';
 import { analyzeIconVisibility, ensureImageDecodes } from './image';
 
@@ -302,7 +303,10 @@ export function documentFromHints(
 
 function parseDocument(html: string): Document | null {
   try {
-    return new DOMParser().parseFromString(html, 'text/html');
+    return new DOMParser().parseFromString(
+      stripInlineHandlers(html),
+      'text/html',
+    );
   } catch {
     return null;
   }
@@ -628,13 +632,10 @@ function decode(bytes: Uint8Array): string {
 async function fetchSvg(url: string, deadline: number): Promise<Blob | null> {
   const bytes = await fetchBytes(url, SVG_LIMIT, deadline);
   if (!bytes) return null;
-  const head = decode(bytes.subarray(0, 8192))
-    .replace(/^\uFEFF/, '')
-    .trimStart();
-  if (!/<svg[\s>]/i.test(head)) return null;
-  const copy = new Uint8Array(bytes.byteLength);
-  copy.set(bytes);
-  const blob = new Blob([copy], { type: SVG_MIME });
+  const text = decode(bytes).replace(/^\uFEFF/, '');
+  const sanitized = sanitizeSvgText(text);
+  if (!sanitized) return null;
+  const blob = new Blob([sanitized], { type: SVG_MIME });
   try {
     await ensureImageDecodes(blob);
   } catch {

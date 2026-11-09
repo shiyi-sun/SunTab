@@ -15,6 +15,7 @@ export function useGridLayout(
 ) {
   const availableWidth = ref(0);
   let observer: ResizeObserver | undefined;
+  let frame = 0;
 
   onMounted(() => {
     const element = viewport.value;
@@ -22,12 +23,21 @@ export function useGridLayout(
     availableWidth.value = element.clientWidth;
     observer = new ResizeObserver((entries) => {
       const entry = entries[0];
-      if (entry) availableWidth.value = entry.contentRect.width;
+      if (!entry) return;
+      const width = entry.contentRect.width;
+      if (Math.abs(width - availableWidth.value) < 0.5) return;
+      // Applying the new width inside the observer can emit another resize in
+      // the same loop, which Chrome reports as an undelivered notification.
+      cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        availableWidth.value = width;
+      });
     });
     observer.observe(element);
   });
 
   onBeforeUnmount(() => {
+    cancelAnimationFrame(frame);
     observer?.disconnect();
   });
 

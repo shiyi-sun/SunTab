@@ -2,7 +2,7 @@
 
 **A quiet, local-first new tab page for Chromium.** SunTab replaces the new tab with a wallpaper, a clock, a search bar, and a small desktop of the sites you actually use. No account, no cloud sync, no telemetry, and no remote component store.
 
-Version **0.2.10** · [简体中文](./README.zh-CN.md)
+Version **0.2.12** · [简体中文](./README.zh-CN.md)
 
 ## Why SunTab
 
@@ -74,16 +74,16 @@ SunTab runs in Chrome, Chromium, and Microsoft Edge. Releases contain a Chrome/C
 
 ### Chrome / Chromium
 
-1. Download `SunTab-0.2.10-chrome.zip` from the [GitHub Releases](https://github.com/shiyi-sun/SunTab/releases) or [AtomGit Releases](https://atomgit.com/shiyi-sun/SunTab/releases) page.
-2. Unzip it into a permanent folder, for example `D:\SunTab\0.2.10`.
+1. Download `SunTab-0.2.12-chrome.zip` from the [GitHub Releases](https://github.com/shiyi-sun/SunTab/releases) or [AtomGit Releases](https://atomgit.com/shiyi-sun/SunTab/releases) page.
+2. Unzip it into a permanent folder, for example `D:\SunTab\0.2.12`.
 3. Open `chrome://extensions` and turn on **Developer mode**.
 4. Click **Load unpacked** and select the extracted `SunTab` folder.
 5. Open a new tab.
 
 ### Microsoft Edge
 
-1. Download `SunTab-0.2.10-edge.zip` from Releases.
-2. Unzip it into a permanent folder, for example `D:\SunTab\0.2.10-edge`.
+1. Download `SunTab-0.2.12-edge.zip` from Releases.
+2. Unzip it into a permanent folder, for example `D:\SunTab\0.2.12-edge`.
 3. Open `edge://extensions` and turn on **Developer mode**.
 4. Click **Load unpacked** and select the extracted `SunTab` folder.
 5. Open a new tab.

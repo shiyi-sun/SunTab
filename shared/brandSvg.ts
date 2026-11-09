@@ -1,3 +1,5 @@
+import { stripInlineHandlers } from './markup';
+
 export interface SvgBox {
   x: number;
   y: number;
@@ -197,7 +199,7 @@ function sanitizeSvg(svg: SVGSVGElement): void {
   )) {
     node.remove();
   }
-  for (const element of Array.from(svg.querySelectorAll('*'))) {
+  for (const element of [svg, ...Array.from(svg.querySelectorAll('*'))]) {
     for (const attribute of Array.from(element.attributes)) {
       if (/^on/i.test(attribute.name)) element.removeAttribute(attribute.name);
       if (
@@ -269,6 +271,22 @@ function svgPoint(
   return { x: clientX, y: clientY };
 }
 
+export function sanitizeSvgText(svgText: string): string | null {
+  if (!/<svg[\s>]/i.test(svgText)) return null;
+  const parsed = new DOMParser().parseFromString(
+    stripInlineHandlers(svgText),
+    'image/svg+xml',
+  );
+  if (parsed.querySelector('parsererror')) return null;
+  const svg = parsed.documentElement as unknown as SVGSVGElement;
+  if (!svg || svg.tagName.toLowerCase() !== 'svg') return null;
+  sanitizeSvg(svg);
+  if (!svg.getAttribute('xmlns')) {
+    svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  }
+  return new XMLSerializer().serializeToString(svg);
+}
+
 /**
  * Returns a standalone SVG for the brand mark. A mark separated from an
  * independent text block is cropped in any of the four directions; a square
@@ -277,7 +295,10 @@ function svgPoint(
  */
 export function prepareBrandSvg(svgText: string): string | null {
   if (!/<svg[\s>]/i.test(svgText)) return null;
-  const parsed = new DOMParser().parseFromString(svgText, 'image/svg+xml');
+  const parsed = new DOMParser().parseFromString(
+    stripInlineHandlers(svgText),
+    'image/svg+xml',
+  );
   if (parsed.querySelector('parsererror')) return null;
   const svg = parsed.documentElement as unknown as SVGSVGElement;
   if (!svg || svg.tagName.toLowerCase() !== 'svg') return null;

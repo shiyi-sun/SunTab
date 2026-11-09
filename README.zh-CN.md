@@ -2,7 +2,7 @@
 
 **本地优先的新标签页，安静、克制、只属于你。** SunTab 把浏览器新标签页换成一张壁纸、一个时钟、一条搜索框，以及你自己摆放的网站图标。没有账号，没有云同步，没有遥测，也没有远端组件商城。
 
-版本 **0.2.10** · [English](./README.md)
+版本 **0.2.12** · [English](./README.md)
 
 ## 为什么是 SunTab
 
@@ -74,16 +74,16 @@ SunTab 支持 Chrome、Chromium 和 Microsoft Edge。发行版同时提供 Chrom
 
 ### Chrome / Chromium
 
-1. 从 [GitHub Releases](https://github.com/shiyi-sun/SunTab/releases) 或 [AtomGit 发行版](https://atomgit.com/shiyi-sun/SunTab/releases) 下载 `SunTab-0.2.10-chrome.zip`。
-2. 解压到一个固定目录，例如 `D:\SunTab\0.2.10`。
+1. 从 [GitHub Releases](https://github.com/shiyi-sun/SunTab/releases) 或 [AtomGit 发行版](https://atomgit.com/shiyi-sun/SunTab/releases) 下载 `SunTab-0.2.12-chrome.zip`。
+2. 解压到一个固定目录，例如 `D:\SunTab\0.2.12`。
 3. 打开 `chrome://extensions`，开启右上角的“开发者模式”。
 4. 点击“加载已解压的扩展程序”，选择解压出来的 `SunTab` 文件夹。
 5. 打开一个新标签页。
 
 ### Microsoft Edge
 
-1. 从发行版下载 `SunTab-0.2.10-edge.zip`。
-2. 解压到一个固定目录，例如 `D:\SunTab\0.2.10-edge`。
+1. 从发行版下载 `SunTab-0.2.12-edge.zip`。
+2. 解压到一个固定目录，例如 `D:\SunTab\0.2.12-edge`。
 3. 打开 `edge://extensions`，开启“开发人员模式”。
 4. 点击“加载解压缩的扩展”，选择解压出来的 `SunTab` 文件夹。
 5. 打开一个新标签页。

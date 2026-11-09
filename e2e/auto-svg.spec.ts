@@ -272,6 +272,12 @@ test.beforeAll(async () => {
       );
       return;
     }
+    if (url === '/inline-handler') {
+      response.end(
+        '<!doctype html><title>inline handler</title><body onload="window.__pageLoad=1"><img/onerror="window.__slashImage=1"><svg/onload="window.__slashSvg=1"></svg><div onclick="window.__click=1" data-x="/onclick=keep">x</div><h1>handler</h1>',
+      );
+      return;
+    }
     response.end('<!doctype html><title>plain</title><h1>plain</h1>');
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -488,7 +494,17 @@ test('automatic icons resolve site svg from link, manifest and fall back', async
         '--lang=zh-CN',
       ],
     });
+    const cspErrors: string[] = [];
+    const watchCsp = (target: Page) => {
+      target.on('console', (message) => {
+        if (message.text().includes('Content Security Policy')) {
+          cspErrors.push(message.text());
+        }
+      });
+    };
+
     const page = await context.newPage();
+    watchCsp(page);
     await page.goto(`chrome-extension://${EXTENSION_ID}/newtab.html`);
     await page.locator('.clock').waitFor();
 
@@ -499,6 +515,7 @@ test('automatic icons resolve site svg from link, manifest and fall back', async
     await expect(manifestImg).toHaveAttribute('src', /^blob:/);
 
     await addIcon(page, '无 SVG', `${base}/plain`);
+    await addIcon(page, '内联事件页', `${base}/inline-handler`);
     await addIcon(page, '品牌裁标志', `${base}/brand-lockup`);
     await addIcon(page, '品牌右标志', `${base}/brand-right-mark`);
     await addIcon(page, '品牌上标志', `${base}/brand-stack`);
@@ -529,11 +546,12 @@ test('automatic icons resolve site svg from link, manifest and fall back', async
     const blankImg = await addIcon(page, '空白优先', `${base}/blank-first`);
     await expect(blankImg).toHaveAttribute('src', /^blob:/);
 
-    await expect.poll(async () => (await readNav(page)).length).toBe(17);
+    await expect.poll(async () => (await readNav(page)).length).toBe(18);
     const nav = await readNav(page);
     expect(nav.find((item) => item.name === '链接 SVG')?.kind).toBe('upload');
     expect(nav.find((item) => item.name === '清单 SVG')?.kind).toBe('upload');
     expect(nav.find((item) => item.name === '无 SVG')?.kind).toBe('favicon');
+    expect(nav.find((item) => item.name === '内联事件页')?.kind).toBe('favicon');
     expect(nav.find((item) => item.name === '品牌裁标志')?.kind).toBe('upload');
     expect(nav.find((item) => item.name === '品牌右标志')?.kind).toBe('upload');
     expect(nav.find((item) => item.name === '品牌上标志')?.kind).toBe('upload');
@@ -597,6 +615,7 @@ test('automatic icons resolve site svg from link, manifest and fall back', async
     expect(svgIcons.filter((icon) => icon.text.includes('#169b62')).length).toBe(2);
 
     const popup = await context.newPage();
+    watchCsp(popup);
     await popup.addInitScript(
       ({ url, title }) => {
         const api = (
@@ -627,7 +646,7 @@ test('automatic icons resolve site svg from link, manifest and fall back', async
     await popup.getByRole('button', { name: '添加到 SunTab' }).click();
     await expect(popup.locator('.saved')).toContainText('已添加');
 
-    await expect.poll(async () => (await readNav(page)).length).toBe(18);
+    await expect.poll(async () => (await readNav(page)).length).toBe(19);
     const navAfterPopup = await readNav(page);
     expect(
       navAfterPopup.find((item) => item.name === '快速添加 SVG')?.kind,
@@ -636,6 +655,7 @@ test('automatic icons resolve site svg from link, manifest and fall back', async
     const source = await context.newPage();
     await source.goto(`${base}/brand-raster-hint`);
     const hintedPopup = await context.newPage();
+    watchCsp(hintedPopup);
     await hintedPopup.addInitScript(
       ({ url, title }) => {
         const api = (
@@ -671,7 +691,7 @@ test('automatic icons resolve site svg from link, manifest and fall back', async
     await expect(hintedPopup.locator('.saved')).toContainText('已添加');
     await expect(hintedPopup.locator('.saved-fallback')).toHaveCount(0);
 
-    await expect.poll(async () => (await readNav(page)).length).toBe(19);
+    await expect.poll(async () => (await readNav(page)).length).toBe(20);
     const navAfterHints = await readNav(page);
     const hintedItem = navAfterHints.find(
       (item) => item.name === '快速添加品牌位图',
@@ -680,6 +700,9 @@ test('automatic icons resolve site svg from link, manifest and fall back', async
     const hintedPixels = await readIconPixels(page, hintedItem?.value ?? '');
     expect(hintedPixels.red).toBeGreaterThan(100);
     expect(hintedPixels.blue).toBe(0);
+
+    // Pages carrying inline on* attributes must not raise extension CSP errors.
+    expect(cspErrors).toEqual([]);
   } finally {
     await context?.close();
     try {
